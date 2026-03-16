@@ -1,0 +1,94 @@
+"""Client API Paperless-ngx."""
+
+import json
+import urllib.error
+import urllib.request
+from typing import Any
+
+from config import PAPERLESS_TOKEN, PAPERLESS_URL
+
+
+def _request(
+    method: str,
+    endpoint: str,
+    data: dict | None = None,
+) -> dict:
+    url = f"{PAPERLESS_URL}/{endpoint.lstrip('/')}"
+    body = json.dumps(data).encode() if data is not None else None
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={
+            "Authorization": f"Token {PAPERLESS_TOKEN}",
+            "Content-Type": "application/json",
+        },
+        method=method,
+    )
+    try:
+        with urllib.request.urlopen(req) as r:
+            if r.status == 204:
+                return {}
+            return json.load(r)
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()
+        raise RuntimeError(f"HTTP {e.code} {method} {url}: {body}") from e
+
+
+def get_document(doc_id: int) -> dict:
+    return _request("GET", f"/documents/{doc_id}/")
+
+
+def get_document_content(doc_id: int) -> str:
+    """Retourne le texte OCR extrait du document."""
+    doc = get_document(doc_id)
+    return doc.get("content", "") or ""
+
+
+def get_all_correspondents() -> dict[str, int]:
+    """Retourne {nom: id} de tous les correspondants."""
+    result = _request("GET", "/correspondents/?page_size=500")
+    return {c["name"]: c["id"] for c in result.get("results", [])}
+
+
+def find_or_create_correspondent(name: str) -> int:
+    """Trouve un correspondant existant (insensible à la casse) ou en crée un."""
+    correspondents = get_all_correspondents()
+    # Recherche insensible à la casse
+    for existing_name, cid in correspondents.items():
+        if existing_name.lower() == name.lower():
+            return cid
+    # Créer
+    result = _request("POST", "/correspondents/", {"name": name})
+    return result["id"]
+
+
+def patch_document(doc_id: int, payload: dict) -> dict:
+    """Met à jour partiellement un document."""
+    return _request("PATCH", f"/documents/{doc_id}/", payload)
+
+
+def build_custom_fields_payload(
+    existing_custom_fields: list[dict],
+    updates: dict[str, Any],
+    field_id_map: dict[str, int],
+) -> list[dict]:
+    """
+    Construit la liste custom_fields pour l'API.
+    Garde les valeurs existantes et applique les updates.
+    """
+    # Index des valeurs existantes par field_id
+    current = {cf["field"]: cf["value"] for cf in existing_custom_fields}
+
+    for field_name, value in updates.items():
+        field_id = field_id_map.get(field_name)
+        if field_id is not None and value is not None:
+            current[field_id] = value
+
+    return [{"field": fid, "value": val} for fid, val in current.items()]
+
+
+def get_tag_ids_by_name(names: list[str]) -> dict[str, int]:
+    """Récupère les IDs des tags par nom."""
+    result = _request("GET", "/tags/?page_size=200")
+    tag_map = {t["name"]: t["id"] for t in result.get("results", [])}
+    return {n: tag_map[n] for n in names if n in tag_map}
