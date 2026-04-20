@@ -62,6 +62,17 @@ def find_or_create_correspondent(name: str) -> int:
     return result["id"]
 
 
+def get_correspondent(corr_id: int) -> dict:
+    """Retourne les données d'un correspondant par ID."""
+    return _request("GET", f"/correspondents/{corr_id}/")
+
+
+def get_documents_by_tag(tag_id: int, page_size: int = 50) -> list[dict]:
+    """Retourne les documents ayant un tag donné."""
+    result = _request("GET", f"/documents/?tags__id__in={tag_id}&page_size={page_size}")
+    return result.get("results", [])
+
+
 def patch_document(doc_id: int, payload: dict) -> dict:
     """Met à jour partiellement un document."""
     return _request("PATCH", f"/documents/{doc_id}/", payload)

@@ -31,6 +31,7 @@ Analyse ce document et retourne UNIQUEMENT un objet JSON valide, sans markdown, 
   "total": "<montant total avant pourboire, décimal ex: 66.81 ou null>",
   "tps": "<montant TPS — 0.00 si absent/exonéré, null si indéterminable>",
   "tvq": "<montant TVQ — 0.00 si absent/exonéré, null si indéterminable>",
+  "line_items": [{"description": "<nom produit/service>", "amount": <montant HT décimal>, "taxable": <true|false>}],
   "tags_to_add": ["<tag1>"],
   "confidence": <0.0 à 1.0>,
   "notes": "<observations importantes>"
@@ -53,6 +54,7 @@ Règles:
 9. gouvernement UNIQUEMENT pour documents émis par une autorité gouvernementale (Revenu Québec, ARC, SAAQ, municipalité, etc.). Un commerce privé (RONA, Canadian Tire, Amazon, etc.) n'est JAMAIS gouvernement même s'il perçoit des taxes.
 10. Document médical (clinique, hôpital, pharmacie, optométriste, dentiste, etc.): mettre doc_type=medical ET ajouter "medical" dans tags_to_add. Si c'est aussi une facture/reçu, ajouter "facture" ou "recu" en plus.
 11. Personnes: si le document concerne Olivia → ajouter "Olivia" dans tags_to_add. Si Leticia → ajouter "Leticia". Aucun tag pour Alexandre.
+12. line_items: extraire CHAQUE ligne de produit/service avec son montant HT et si elle est taxable (TPS+TVQ). Si les lignes ne sont pas clairement identifiables (reçu global, montant unique), mettre line_items=[]. Les montants line_items sont AVANT taxes. La somme des amounts doit égaler total-tps-tvq.
 """
 
 PROMPT_TEXT = """\
@@ -74,6 +76,7 @@ Retourne UNIQUEMENT un objet JSON valide, sans markdown:
   "total": "<montant total décimal ou null>",
   "tps": "<montant TPS — 0.00 si absent/exonéré, null si indéterminable>",
   "tvq": "<montant TVQ — 0.00 si absent/exonéré, null si indéterminable>",
+  "line_items": [{{"description": "<nom produit/service>", "amount": <montant HT décimal>, "taxable": <true|false>}}],
   "tags_to_add": ["<tag1>"],
   "confidence": <0.0 à 1.0>,
   "notes": "<observations>"
@@ -86,6 +89,7 @@ Règles:
 - gouvernement UNIQUEMENT pour documents d'autorités gouvernementales (Revenu Québec, ARC, SAAQ, etc.) — jamais pour un commerce privé.
 - Document médical (clinique, pharmacie, dentiste, etc.): doc_type=medical ET "medical" dans tags_to_add. Si c'est aussi une facture/reçu, ajouter "facture" ou "recu" en plus.
 - Si document concerne Olivia → ajouter "Olivia" dans tags_to_add. Si Leticia → ajouter "Leticia". Aucun tag pour Alexandre.
+- line_items: extraire chaque ligne produit/service avec montant HT et taxable (true/false). Si non identifiable clairement → line_items=[]. Somme des amounts = total-tps-tvq.
 """
 
 
@@ -183,6 +187,23 @@ def _validate_and_clean(data: dict) -> dict:
         data["confidence"] = min(data.get("confidence", 0.5), 0.60)
         data["notes"] = (data.get("notes", "") +
                          " [ATTENTION: total présent mais TVQ=0.00 — vérifier]")
+
+    # Valider line_items
+    raw_items = data.get("line_items", [])
+    clean_items = []
+    if isinstance(raw_items, list):
+        for item in raw_items:
+            if not isinstance(item, dict):
+                continue
+            try:
+                clean_items.append({
+                    "description": str(item.get("description", "")).strip(),
+                    "amount":      round(float(item.get("amount", 0)), 2),
+                    "taxable":     bool(item.get("taxable", True)),
+                })
+            except (ValueError, TypeError):
+                continue
+    data["line_items"] = clean_items
 
     inv = data.get("invoice_number")
     data["invoice_number"] = str(inv).strip() if inv and str(inv).lower() != "null" else None

@@ -246,13 +246,50 @@ def process_document(doc_id: int) -> None:
     else:
         log.info("Aucune modification nécessaire")
 
-    # 6. Log résumé pour audit
+    # 6. Auto-push Dolibarr — désactivé temporairement
+    # _maybe_push_to_dolibarr(doc_id, analysis)
+
+    # 7. Log résumé pour audit
     log.info(
         f"RÉSUMÉ | ID={doc_id} | type={analysis['doc_type']} | "
         f"context={analysis['context']} | confidence={analysis['confidence']:.2f} | "
         f"correspondant={suggested_corr} | date={date_val} | "
         f"total={analysis.get('total')} | tps={analysis.get('tps')} | tvq={analysis.get('tvq')}"
     )
+
+
+def _maybe_push_to_dolibarr(doc_id: int, analysis: dict) -> None:
+    """
+    Pousse automatiquement vers Dolibarr si:
+    - doc_type est facture ou recu
+    - context est rapidetech
+    - confidence >= 0.75
+    - un total est disponible
+    """
+    doc_type = analysis.get("doc_type")
+    context = analysis.get("context")
+    confidence = analysis.get("confidence", 0.0)
+    total = analysis.get("total")
+
+    if doc_type not in ("facture", "recu"):
+        return
+    if context != "rapidetech":
+        log.info(f"Doc {doc_id}: contexte '{context}' — pas d'auto-push Dolibarr")
+        return
+    if confidence < 0.75:
+        log.info(f"Doc {doc_id}: confiance {confidence:.2f} < 0.75 — pas d'auto-push Dolibarr")
+        return
+    if not total:
+        log.info(f"Doc {doc_id}: pas de total — pas d'auto-push Dolibarr")
+        return
+
+    log.info(f"Doc {doc_id}: auto-push Dolibarr (type={doc_type} confiance={confidence:.2f})")
+    try:
+        import push_to_dolibarr
+        line_items = analysis.get("line_items", [])
+        push_to_dolibarr.push_document(doc_id, force=False, prefetched_line_items=line_items)
+    except Exception as e:
+        log.error(f"Doc {doc_id}: erreur auto-push Dolibarr: {e}")
 
 
 def _is_generic_title(title: str) -> bool:

@@ -30,6 +30,8 @@ TAG_IDS = {
     "assurance": 74,
     "autre": 75,
     "a-verifier": 76,
+    "dolibarr-queue": 79,
+    "dolibarr-sent": 80,
     # Contexte
     "personnel": 56,
     "medical": 13,
