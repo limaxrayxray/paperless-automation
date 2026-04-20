@@ -153,26 +153,21 @@ def process_document(doc_id: int) -> None:
     log.info(f"Tags actuels: {current_tags}")
     log.info(f"Contenu OCR: {len(content)} caractères")
 
-    # 2. Analyse — Claude vision en priorité, fallback texte OCR si échec
-    log.info("Analyse via Claude vision (image directe)...")
+    # 2. Analyse — OCR texte d'abord, vision en fallback si confiance basse
+    log.info("Analyse via Claude (OCR-first)...")
     analysis = None
     try:
-        analysis = claude_analyzer.analyze_document_vision(doc_id)
-        log.info("Claude vision: succès")
+        analysis = claude_analyzer.analyze_document_smart(doc_id, title, content)
+        log.info(f"Claude succès (méthode: {analysis.get('_method', '?')})")
+    except claude_analyzer.RateLimitError as e:
+        log.warning(f"Rate limit Claude — document mis en queue: {e}")
+        _queue_for_retry(doc_id)
+        return
     except Exception as e:
-        log.warning(f"Vision échouée ({e}) — fallback texte OCR")
-
-    if analysis is None:
-        log.info("Fallback: analyse via texte OCR...")
-        try:
-            analysis = claude_analyzer.analyze_document(title, content)
-            log.info("Fallback texte: succès")
-        except Exception as e:
-            log.error(f"Erreur analyse: {e}")
-        # Fallback: tag a-verifier
+        log.error(f"Erreur analyse: {e}")
         patch = {"tags": list(set(current_tags) | {TAG_IDS["a-verifier"]} - PROTECTED_TAG_IDS | (PROTECTED_TAG_IDS & set(current_tags)))}
         paperless_client.patch_document(doc_id, patch)
-        log.warning(f"Tag a-verifier ajouté (erreur Claude)")
+        log.warning("Tag a-verifier ajouté (erreur Claude)")
         return
 
     log.info(
@@ -246,10 +241,7 @@ def process_document(doc_id: int) -> None:
     else:
         log.info("Aucune modification nécessaire")
 
-    # 6. Auto-push Dolibarr — désactivé temporairement
-    # _maybe_push_to_dolibarr(doc_id, analysis)
-
-    # 7. Log résumé pour audit
+    # 6. Log résumé pour audit
     log.info(
         f"RÉSUMÉ | ID={doc_id} | type={analysis['doc_type']} | "
         f"context={analysis['context']} | confidence={analysis['confidence']:.2f} | "
@@ -258,38 +250,37 @@ def process_document(doc_id: int) -> None:
     )
 
 
-def _maybe_push_to_dolibarr(doc_id: int, analysis: dict) -> None:
-    """
-    Pousse automatiquement vers Dolibarr si:
-    - doc_type est facture ou recu
-    - context est rapidetech
-    - confidence >= 0.75
-    - un total est disponible
-    """
-    doc_type = analysis.get("doc_type")
-    context = analysis.get("context")
-    confidence = analysis.get("confidence", 0.0)
-    total = analysis.get("total")
+RETRY_QUEUE_FILE = "/opt/paperless/scripts/retry_queue.json"
 
-    if doc_type not in ("facture", "recu"):
-        return
-    if context != "rapidetech":
-        log.info(f"Doc {doc_id}: contexte '{context}' — pas d'auto-push Dolibarr")
-        return
-    if confidence < 0.75:
-        log.info(f"Doc {doc_id}: confiance {confidence:.2f} < 0.75 — pas d'auto-push Dolibarr")
-        return
-    if not total:
-        log.info(f"Doc {doc_id}: pas de total — pas d'auto-push Dolibarr")
-        return
 
-    log.info(f"Doc {doc_id}: auto-push Dolibarr (type={doc_type} confiance={confidence:.2f})")
+def _queue_for_retry(doc_id: int) -> None:
+    """Ajoute un document à la queue de retry pour quand le rate limit sera levé."""
+    import fcntl
+    from datetime import datetime, timezone
+    queue = []
     try:
-        import push_to_dolibarr
-        line_items = analysis.get("line_items", [])
-        push_to_dolibarr.push_document(doc_id, force=False, prefetched_line_items=line_items)
-    except Exception as e:
-        log.error(f"Doc {doc_id}: erreur auto-push Dolibarr: {e}")
+        with open(RETRY_QUEUE_FILE, "r") as f:
+            fcntl.flock(f, fcntl.LOCK_SH)
+            queue = json.load(f)
+            fcntl.flock(f, fcntl.LOCK_UN)
+    except (FileNotFoundError, json.JSONDecodeError):
+        pass
+
+    # Éviter les doublons
+    if not any(e["doc_id"] == doc_id for e in queue):
+        queue.append({
+            "doc_id": doc_id,
+            "queued_at": datetime.now(timezone.utc).isoformat(),
+            "attempts": 0,
+        })
+        with open(RETRY_QUEUE_FILE, "w") as f:
+            fcntl.flock(f, fcntl.LOCK_EX)
+            json.dump(queue, f, indent=2)
+            fcntl.flock(f, fcntl.LOCK_UN)
+        log.info(f"Doc {doc_id} ajouté à la retry queue ({RETRY_QUEUE_FILE})")
+    else:
+        log.info(f"Doc {doc_id} déjà dans la retry queue")
+
 
 
 def _is_generic_title(title: str) -> bool:

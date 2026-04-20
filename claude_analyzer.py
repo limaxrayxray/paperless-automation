@@ -93,6 +93,11 @@ Règles:
 """
 
 
+class RateLimitError(Exception):
+    """Levée quand Claude retourne une erreur de limite de taux."""
+    pass
+
+
 def _call_claude(input_json: dict) -> str:
     """Appelle claude CLI en mode stream-json et retourne le texte résultat."""
     env = os.environ.copy()
@@ -108,6 +113,10 @@ def _call_claude(input_json: dict) -> str:
         timeout=120,
         env=env,
     )
+
+    combined = (result.stdout + result.stderr).lower()
+    if any(kw in combined for kw in ("rate limit", "rate_limit", "429", "too many requests", "overloaded", "529")):
+        raise RateLimitError(f"Claude rate limit atteint: {result.stderr[:200]}")
 
     if result.returncode != 0:
         raise RuntimeError(f"Claude CLI erreur (code {result.returncode}): {result.stderr[:300]}")
@@ -217,6 +226,38 @@ def _validate_and_clean(data: dict) -> dict:
     data["correspondent"] = str(corr).strip() if corr and str(corr).lower() != "null" else None
 
     return data
+
+
+OCR_MIN_CHARS = 150       # texte OCR jugé suffisant pour éviter la vision
+OCR_MIN_CONFIDENCE = 0.70  # confiance minimale du texte pour ne pas fallback vision
+
+
+def analyze_document_smart(doc_id: int, title: str, content: str) -> dict:
+    """
+    Stratégie OCR-first :
+    1. Si OCR suffisant → texte d'abord
+       - confiance >= OCR_MIN_CONFIDENCE → retourner le résultat
+       - sinon → fallback vision
+    2. Si OCR insuffisant (<150 chars) → vision directement
+    """
+    if content and len(content.strip()) >= OCR_MIN_CHARS:
+        text_result = analyze_document(title, content)
+        if text_result.get("confidence", 0) >= OCR_MIN_CONFIDENCE:
+            text_result["_method"] = "ocr_text"
+            return text_result
+        # Confiance trop basse → tenter vision
+        try:
+            vision_result = analyze_document_vision(doc_id)
+            vision_result["_method"] = "vision_fallback"
+            return vision_result
+        except Exception:
+            text_result["_method"] = "ocr_text_only"
+            return text_result
+    else:
+        # OCR insuffisant → vision directement
+        vision_result = analyze_document_vision(doc_id)
+        vision_result["_method"] = "vision_primary"
+        return vision_result
 
 
 def analyze_document_vision(doc_id: int) -> dict:
