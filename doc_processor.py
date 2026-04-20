@@ -138,6 +138,12 @@ def build_custom_fields(
     )
 
 
+def _is_inline_email_image(title: str, content: str) -> bool:
+    """Détecte les images inline d'email (ex: image001, image002) — à supprimer."""
+    import re
+    return bool(re.match(r'^image\d+$', title.strip(), re.I)) and len(content.strip()) == 0
+
+
 def process_document(doc_id: int) -> None:
     log.info(f"=== Traitement document ID={doc_id} ===")
 
@@ -152,6 +158,16 @@ def process_document(doc_id: int) -> None:
     log.info(f"Titre: {title}")
     log.info(f"Tags actuels: {current_tags}")
     log.info(f"Contenu OCR: {len(content)} caractères")
+
+    # Supprimer les images inline d'email (image001, image002, etc.)
+    if _is_inline_email_image(title, content):
+        log.info(f"Doc {doc_id} ignoré: image inline email ('{title}') — suppression")
+        try:
+            paperless_client.delete_document(doc_id)
+            log.info(f"Doc {doc_id} supprimé")
+        except Exception as e:
+            log.warning(f"Doc {doc_id}: impossible de supprimer: {e}")
+        return
 
     # 2. Analyse — OCR texte d'abord, vision en fallback si confiance basse
     log.info("Analyse via Claude (OCR-first)...")

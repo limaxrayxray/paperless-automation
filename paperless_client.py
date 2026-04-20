@@ -78,6 +78,11 @@ def patch_document(doc_id: int, payload: dict) -> dict:
     return _request("PATCH", f"/documents/{doc_id}/", payload)
 
 
+def delete_document(doc_id: int) -> None:
+    """Supprime définitivement un document."""
+    _request("DELETE", f"/documents/{doc_id}/")
+
+
 def build_custom_fields_payload(
     existing_custom_fields: list[dict],
     updates: dict[str, Any],
