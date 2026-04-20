@@ -114,18 +114,32 @@ def _call_claude(input_json: dict) -> str:
         env=env,
     )
 
-    combined = (result.stdout + result.stderr).lower()
-    if any(kw in combined for kw in ("rate limit", "rate_limit", "429", "too many requests", "overloaded", "529")):
-        raise RateLimitError(f"Claude rate limit atteint: {result.stderr[:200]}")
-
     if result.returncode != 0:
+        stderr = result.stderr.lower()
+        if any(kw in stderr for kw in ("429", "too many requests", "overloaded")):
+            raise RateLimitError(f"Claude rate limit atteint: {result.stderr[:200]}")
         raise RuntimeError(f"Claude CLI erreur (code {result.returncode}): {result.stderr[:300]}")
 
     for line in result.stdout.strip().split("\n"):
         try:
             obj = json.loads(line)
+
+            # rate_limit_event est toujours présent — seulement lever si status=rejected
+            if obj.get("type") == "rate_limit_event":
+                info = obj.get("rate_limit_info", {})
+                if info.get("status") == "rejected":
+                    raise RateLimitError(f"Claude rate limit rejeté: {info}")
+
             if obj.get("type") == "result":
+                if obj.get("is_error"):
+                    status = obj.get("api_error_status", "")
+                    if status in (429, "429"):
+                        raise RateLimitError(f"Claude API 429: {obj}")
+                    raise RuntimeError(f"Claude erreur API: {obj}")
                 return obj.get("result", "")
+
+        except (RateLimitError, RuntimeError):
+            raise
         except json.JSONDecodeError:
             continue
 
