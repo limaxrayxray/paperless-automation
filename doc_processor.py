@@ -7,6 +7,7 @@ Variables d'environnement fournies par Paperless:
   DOCUMENT_ID, DOCUMENT_FILE_NAME, DOCUMENT_TAGS, DOCUMENT_CORRESPONDENT, etc.
 """
 
+import json
 import logging
 import os
 import sys
