@@ -205,7 +205,7 @@ def process_document(doc_id: int) -> None:
 
     # Titre suggéré (seulement si le titre actuel est générique/auto-généré)
     suggested_title = analysis.get("suggested_title", "").strip()
-    if suggested_title and suggested_title != title and _is_generic_title(title):
+    if suggested_title and suggested_title != title and not _is_standard_title(title):
         payload["title"] = suggested_title
         log.info(f"Titre: '{title}' → '{suggested_title}'")
 
@@ -300,29 +300,13 @@ def _queue_for_retry(doc_id: int) -> None:
 
 
 
-def _is_generic_title(title: str) -> bool:
+def _is_standard_title(title: str) -> bool:
     """
-    Retourne True si le titre semble auto-généré (nom de fichier, ID, date brute).
-    Dans ce cas, on peut le remplacer par le titre suggéré par Claude.
+    Retourne True si le titre suit déjà le format standard 'Fournisseur YYYY-MM'.
+    Dans ce cas, on ne le remplace pas.
     """
     import re
-    t = title.strip()
-    # Fichier: scan001.pdf, IMG_1234, page-001, Receipt_001441, Facture_001234
-    if re.match(r'^(scan|img|page|doc|document|untitled|fichier|receipt|facture_\d|invoice)[\s_\-]?\d*', t, re.I):
-        return True
-    # Pattern scanner Brother/imprimante: Mot_Chiffres (ex: Receipt_001441, Facture_001439)
-    if re.match(r'^[A-Za-z]+_\d{4,}$', t):
-        return True
-    # Seulement des chiffres, tirets, underscores (ex: "2024-01-15", "20240115")
-    if re.match(r'^[\d\-_\.]+$', t):
-        return True
-    # Très court (moins de 5 chars) ou numérique seul
-    if len(t) < 5:
-        return True
-    # Ressemble à un nom de fichier sans extension pertinente
-    if re.match(r'^[A-Z0-9_\-]{3,20}$', t):
-        return True
-    return False
+    return bool(re.search(r'\b20\d{2}-(?:0[1-9]|1[0-2])\b', title.strip()))
 
 
 # ─── ENTRY POINT ──────────────────────────────────────────────────────────────
