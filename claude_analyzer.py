@@ -47,7 +47,7 @@ Règles:
 2. total = montant avant pourboire (si pourboire présent sur le document)
 3. date_confidence=1.0 seulement si date explicite et non ambiguë
 4. correspondent = nom de l'émetteur/fournisseur (pas le destinataire)
-5. suggested_title: format "[Correspondant] [YYYY-MM]"
+5. suggested_title: format strict "[Fournisseur] [YYYY-MM]" — UNIQUEMENT le nom du fournisseur et la date, rien d'autre. Exemples: "Bell Canada 2026-03", "RONA 2026-02", "Anthropic 2026-04". Pas de description, pas de numéro de facture, pas de tirets supplémentaires.
 6. Si document multi-colonnes (ex: 2 reçus côte à côte): analyser les DEUX et prendre les données de la facture principale (avec détail des taxes)
 7. Ne jamais mettre personnel/impots dans tags_to_add
 8. Contexte fiscal Québec: TPS 5%, TVQ 9.975%. Congé fiscal fédéral déc 2024 – fév 2025: TPS=0.00 sur certains articles
@@ -86,6 +86,7 @@ Valeurs doc_type: facture | recu | releve | contrat | assurance | rapport | cert
 Tags autorisés: {allowed_tags}
 Règles:
 - Pour facture/recu: tps/tvq toujours un nombre (0.00 si non applicable). Ne pas mettre personnel/impots dans tags_to_add.
+- suggested_title: format strict "[Fournisseur] [YYYY-MM]" — UNIQUEMENT le nom du fournisseur et la date, rien d'autre. Exemples: "Bell Canada 2026-03", "RONA 2026-02", "Anthropic 2026-04". Pas de description, pas de numéro de facture, pas de tirets supplémentaires.
 - gouvernement UNIQUEMENT pour documents d'autorités gouvernementales (Revenu Québec, ARC, SAAQ, etc.) — jamais pour un commerce privé.
 - Document médical (clinique, pharmacie, dentiste, etc.): doc_type=medical ET "medical" dans tags_to_add. Si c'est aussi une facture/reçu, ajouter "facture" ou "recu" en plus.
 - Si document concerne Olivia → ajouter "Olivia" dans tags_to_add. Si Leticia → ajouter "Leticia". Aucun tag pour Alexandre.
@@ -202,10 +203,10 @@ def _validate_and_clean(data: dict) -> dict:
         if data.get("tvq") is None:
             data["tvq"] = "0.00"
 
-    # Détection incohérence fiscale (scan multi-colonnes raté)
+    # Détection incohérence fiscale (scan multi-colonnes raté ou extraction ratée)
     total = data.get("total")
     tvq = data.get("tvq")
-    if (data.get("doc_type") == "recu" and total is not None
+    if (data.get("doc_type") in ("recu", "facture") and total is not None
             and tvq == "0.00" and float(total) > 20.0):
         data["confidence"] = min(data.get("confidence", 0.5), 0.60)
         data["notes"] = (data.get("notes", "") +

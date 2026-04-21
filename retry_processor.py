@@ -15,6 +15,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import claude_analyzer
 import doc_processor
+import paperless_client
+from config import TAG_IDS
 
 RETRY_QUEUE_FILE = "/opt/paperless/scripts/retry_queue.json"
 MAX_ATTEMPTS = 5
@@ -70,7 +72,15 @@ def main():
             continue
 
         if attempts >= MAX_ATTEMPTS:
-            log.warning(f"Doc {doc_id}: {MAX_ATTEMPTS} tentatives épuisées — abandonné")
+            log.warning(f"Doc {doc_id}: {MAX_ATTEMPTS} tentatives épuisées — tag a-verifier")
+            try:
+                doc = paperless_client.get_document(doc_id)
+                current_tags = doc.get("tags", [])
+                new_tags = sorted(set(current_tags) | {TAG_IDS["a-verifier"]})
+                if set(new_tags) != set(current_tags):
+                    paperless_client.patch_document(doc_id, {"tags": new_tags})
+            except Exception as e:
+                log.error(f"Doc {doc_id}: impossible d'ajouter a-verifier: {e}")
             continue
 
         log.info(f"Retry doc {doc_id} (tentative {attempts + 1}/{MAX_ATTEMPTS})...")

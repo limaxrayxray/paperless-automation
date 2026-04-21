@@ -172,17 +172,15 @@ def process_document(doc_id: int) -> None:
 
     # 2. Analyse — OCR texte d'abord, vision en fallback si confiance basse
     log.info("Analyse via Claude (OCR-first)...")
-    analysis = None
     try:
         analysis = claude_analyzer.analyze_document_smart(doc_id, title, content)
         log.info(f"Claude succès (méthode: {analysis.get('_method', '?')})")
-    except claude_analyzer.RateLimitError as e:
-        log.warning(f"Rate limit Claude — document mis en queue: {e}")
-        _queue_for_retry(doc_id)
-        return
+    except claude_analyzer.RateLimitError:
+        # Remonte au caller — post_consume queue, retry_processor laisse dans remaining
+        raise
     except Exception as e:
         log.error(f"Erreur analyse: {e}")
-        patch = {"tags": list(set(current_tags) | {TAG_IDS["a-verifier"]} - PROTECTED_TAG_IDS | (PROTECTED_TAG_IDS & set(current_tags)))}
+        patch = {"tags": sorted(set(current_tags) | {TAG_IDS["a-verifier"]})}
         paperless_client.patch_document(doc_id, patch)
         log.warning("Tag a-verifier ajouté (erreur Claude)")
         return
@@ -205,7 +203,7 @@ def process_document(doc_id: int) -> None:
 
     # Titre suggéré (seulement si le titre actuel est générique/auto-généré)
     suggested_title = analysis.get("suggested_title", "").strip()
-    if suggested_title and suggested_title != title and not _is_standard_title(title):
+    if suggested_title and suggested_title != title:
         payload["title"] = suggested_title
         log.info(f"Titre: '{title}' → '{suggested_title}'")
 
@@ -300,15 +298,6 @@ def _queue_for_retry(doc_id: int) -> None:
 
 
 
-def _is_standard_title(title: str) -> bool:
-    """
-    Retourne True si le titre suit déjà le format standard 'Fournisseur YYYY-MM'.
-    Dans ce cas, on ne le remplace pas.
-    """
-    import re
-    return bool(re.search(r'\b20\d{2}-(?:0[1-9]|1[0-2])\b', title.strip()))
-
-
 # ─── ENTRY POINT ──────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -331,6 +320,9 @@ if __name__ == "__main__":
 
     try:
         process_document(doc_id)
+    except claude_analyzer.RateLimitError as e:
+        log.warning(f"Rate limit Claude — document mis en queue: {e}")
+        _queue_for_retry(doc_id)
     except Exception as e:
         log.exception(f"Erreur fatale traitement document {doc_id}: {e}")
         sys.exit(1)
