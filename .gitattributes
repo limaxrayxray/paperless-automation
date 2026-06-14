@@ -1,0 +1,10 @@
+# Les scripts shell doivent rester en LF : exécutés sur Linux (LXC), un CRLF
+# casserait le shebang (« bad interpreter: /bin/bash^M »). Idem pour le hook
+# post-consommation et les .service systemd.
+*.sh text eol=lf
+*.service text eol=lf
+*.socket text eol=lf
+.env.example text eol=lf
+
+# Données de migration Wave (export figé) : ne pas normaliser les fins de ligne.
+wave_export/** -text
