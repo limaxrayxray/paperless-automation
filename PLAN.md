@@ -78,7 +78,7 @@ doit voyager dans le payload. Cf. SPEC.md § contrat (version 2).
       par le loop. Option `--dry-run` (défaut) qui n'écrit rien et `--limit N`.
       Tests : la fonction pure de sélection (« quels docs backfiller ») et la
       construction du patch, tout mocké — aucun réseau dans les tests.
-- [ ] `docs: contrat compta_json v2` — mettre à jour README (les 3 champs, la règle
+- [x] `docs: contrat compta_json v2` — mettre à jour README (les 3 champs, la règle
       devise, la compat v1↔v2) et noter la bascule de version.
 
 ## Phase 3 — Côté consommateur (réalisé dans le repo compta-rapidetech)

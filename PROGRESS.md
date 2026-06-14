@@ -1,7 +1,36 @@
+DONE
+
 # PROGRESS — Automatisation Paperless Rapidetech
 
 (Le loop écrit ici une entrée datée par tâche. La première ligne devient `DONE`
 quand toutes les tâches hors Phase 3 sont cochées ou BLOQUÉES.)
+
+## 2026-06-14 — Phase 4 tâche 4 : docs contrat compta_json v2 (Phase 4 terminée)
+
+**Tâche** : mettre à jour le README pour le contrat v2 — les 3 nouveaux champs
+(`doc_type`, `currency`, `supplier_foreign`), la règle devise (≠ CAD ne déclenche
+pas `needs_review` côté producteur), la compat v1↔v2, et la bascule de version.
+
+**Fait** :
+- `README.md`, section « Contrat `compta_json` » : version courante passée de `1` à
+  `2`; schéma JSON enrichi des 3 champs v2 (avec leurs positions et valeurs par
+  défaut). Nouvelles puces de règles : `doc_type` (relayé, `null` si absent;
+  consommateur ignore non-facture/recu), `currency` (défaut CAD, normalisée
+  majuscules, sans conversion, ≠ CAD ne déclenche pas `needs_review` — le
+  consommateur tranche), `supplier_foreign` (défaut false; taxes nulles normales).
+  Nouveau paragraphe « Compatibilité v1 ↔ v2 » : champs apparus en v2 (motivés par
+  l'audit du 2026-06-14), consommateur v1 ignore les champs en trop, consommateur
+  v2 tolère un payload v1 (défauts), recalcul de l'historique via
+  `backfill_compta_json.py` (appel réseau réel, jamais par le loop).
+
+**Décisions** : tâche purement documentaire — aucun code touché, gate inchangé. Doc
+gardée dans le README (renvoi à SPEC.md comme source de vérité, sans la dupliquer).
+
+**Vérifications** : `python -m pytest -q` ✅ (183/183). **Phase 4 complète.** Toutes
+les tâches hors Phase 3 sont cochées → `DONE` en première ligne. Phase 3 est réalisée
+dans le repo `compta-rapidetech`.
+
+**Fichiers** : README.md, PLAN.md, PROGRESS.md.
 
 ## 2026-06-14 — Phase 4 tâche 3 : backfill_compta_json.py
 
