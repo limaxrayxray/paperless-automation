@@ -11,7 +11,7 @@ mocké, jamais d'appel réel Paperless/Claude). Jamais de déploiement automatiq
 
 - [x] `requirements-dev.txt` (pytest) + note dans README : créer un venv, installer,
       lancer `python -m pytest`. `pytest.ini` (ou `pyproject`) ciblant `test_*.py`.
-- [ ] `conftest.py` : fixtures de mock — un faux `subprocess.run` pour Claude CLI
+- [x] `conftest.py` : fixtures de mock — un faux `subprocess.run` pour Claude CLI
       (réponses simulées, pas de réseau) et un faux client Paperless (get/patch/delete
       en mémoire). Aucun appel externe réel.
 - [ ] Premier test vert : `_extract_json` (claude_analyzer) — JSON nu, fencé ```json,

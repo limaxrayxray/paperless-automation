@@ -25,6 +25,28 @@ de mock (faux Claude CLI, faux client Paperless) à la tâche suivante.
 **Fichiers** : requirements-dev.txt, pytest.ini, tests/conftest.py, tests/test_sanity.py,
 README.md, PLAN.md, PROGRESS.md.
 
+## 2026-06-13 — Phase 0 tâche 2 : fixtures de mock
+
+**Tâche** : fixtures `conftest.py` — faux Claude CLI + faux client Paperless, zéro réseau.
+
+**Fait** :
+- `fake_claude` : patche `claude_analyzer.subprocess.run` pour émettre le flux
+  stream-json attendu par `_call_claude`. Retourne `set_result(text, returncode, stderr)`
+  → le test fixe le JSON « du modèle » ou simule une erreur CLI.
+- `FakePaperless` + fixture `fake_paperless` : client en mémoire (docs, correspondants,
+  suppressions), branché sur le module `paperless_client` via monkeypatch — donc vu
+  aussi par `doc_processor`. `build_custom_fields_payload` (pure) reste l'originale.
+- `tests/test_fixtures.py` : 4 tests (analyze_document via faux CLI, erreur CLI → 
+  RuntimeError, get/patch/delete en mémoire, correspondant idempotent insensible à la casse).
+
+**Décisions** : monkeypatch des fonctions du module `paperless_client` plutôt qu'injection
+de dépendance — le code de prod appelle `paperless_client.X` directement, on respecte
+ce style sans le refactorer.
+
+**Vérifications** : `python -m pytest -q` ✅ (6/6).
+
+**Fichiers** : tests/conftest.py, tests/test_fixtures.py, PLAN.md, PROGRESS.md.
+
 ## Décisions à valider
 
 - Contrat d'unification : un seul champ Paperless `compta_json` (texte long, JSON),
