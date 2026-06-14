@@ -115,6 +115,7 @@ CUSTOM_FIELD_IDS = {
     "TVQ": 14,
     "Total": 15,
     "Facture": 16,  # Numéro de facture
+    "compta_json": 17,
 }
 
 # ─── TYPES DE DOCUMENT ────────────────────────────────────────────────────────
