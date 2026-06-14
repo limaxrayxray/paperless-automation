@@ -138,6 +138,29 @@ qu'écrits en dur.
 
 **Fichiers** : tests/test_build_tag_updates.py, PLAN.md, PROGRESS.md.
 
+## 2026-06-13 — Phase 1 tâche 4 : tests build_custom_fields
+
+**Tâche** : tester `doc_processor.build_custom_fields` — TPS/TVQ/Total/Facture
+écrits seulement pour les `doc_type` pertinents, valeurs existantes préservées,
+aucune valeur None écrite.
+
+**Fait** : `tests/test_build_custom_fields.py` — 10 cas :
+- Types pertinents (facture/recu/releve/contrat/assurance/autre) : facture écrit
+  les 4 champs ; chaque type pertinent écrit bien le Total.
+- Types non pertinents (rapport/manuel/personnel/medical/""/None) : aucun champ
+  écrit ; un type non pertinent préserve les champs existants sans les détruire.
+- None : montants None / clés absentes non écrits ; `invoice_number` "" (falsy)
+  ignoré — le code teste la véracité, pas `is None`.
+- Existant : valeur existante non touchée conservée ; nouvelle valeur écrase
+  l'ancienne ; un None de l'analyse n'efface jamais une valeur existante.
+
+**Décisions** : résultat réindexé par field id (`_by_id`) car l'ordre de la liste
+`custom_fields` n'est pas garanti. IDs importés de `config.CUSTOM_FIELD_IDS`.
+
+**Vérifications** : `python -m pytest -q` ✅ (88/88).
+
+**Fichiers** : tests/test_build_custom_fields.py, PLAN.md, PROGRESS.md.
+
 ## Décisions à valider
 
 - Contrat d'unification : un seul champ Paperless `compta_json` (texte long, JSON),

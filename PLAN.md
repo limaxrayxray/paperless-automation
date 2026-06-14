@@ -28,7 +28,7 @@ mocké, jamais d'appel réel Paperless/Claude). Jamais de déploiement automatiq
 - [x] Tests `build_tag_updates` : tags protégés jamais retirés ni ajoutés; un seul tag
       année à la fois (selon `DATE_CONFIDENCE_THRESHOLD`); `a-verifier` ajouté/retiré
       selon `GLOBAL_CONFIDENCE_THRESHOLD`; règle medical → personnel.
-- [ ] Tests `build_custom_fields` : TPS/TVQ/Total/Facture écrits seulement pour les
+- [x] Tests `build_custom_fields` : TPS/TVQ/Total/Facture écrits seulement pour les
       types pertinents; valeurs existantes préservées; aucune valeur None écrite.
 - [ ] Test d'idempotence de `process_document` (client mocké) : deux passages
       successifs sur le même document convergent (mêmes tags/champs finaux, aucun
