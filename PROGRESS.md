@@ -47,6 +47,19 @@ ce style sans le refactorer.
 
 **Fichiers** : tests/conftest.py, tests/test_fixtures.py, PLAN.md, PROGRESS.md.
 
+## 2026-06-13 — Phase 0 tâche 3 : tests _extract_json (Phase 0 terminée)
+
+**Tâche** : tests de `claude_analyzer._extract_json` (extraction tolérante du JSON).
+
+**Fait** : `tests/test_claude_analyzer.py` — 7 cas : JSON nu, espaces autour, fence
+```json, fence sans langage, entouré de texte, objet nesté (récupéré par la branche
+gloutonne `\{.*\}` quand la branche fencée non-gloutonne échoue), illisible → ValueError.
+
+**Vérifications** : `python -m pytest -q` ✅ (13/13). **Phase 0 complète** (harnais +
+mocks + premiers tests). Prochaine : Phase 1 (durcir l'existant) — `_validate_and_clean`.
+
+**Fichiers** : tests/test_claude_analyzer.py, PLAN.md, PROGRESS.md.
+
 ## Décisions à valider
 
 - Contrat d'unification : un seul champ Paperless `compta_json` (texte long, JSON),

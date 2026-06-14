@@ -14,7 +14,7 @@ mocké, jamais d'appel réel Paperless/Claude). Jamais de déploiement automatiq
 - [x] `conftest.py` : fixtures de mock — un faux `subprocess.run` pour Claude CLI
       (réponses simulées, pas de réseau) et un faux client Paperless (get/patch/delete
       en mémoire). Aucun appel externe réel.
-- [ ] Premier test vert : `_extract_json` (claude_analyzer) — JSON nu, fencé ```json,
+- [x] Premier test vert : `_extract_json` (claude_analyzer) — JSON nu, fencé ```json,
       entouré de texte, et cas illisible (lève ValueError).
 
 ## Phase 1 — Durcir l'extraction existante (tests sur le code en place)
