@@ -84,6 +84,29 @@ et le drapeau d'incohérence fiscale, qui relèvent de la tâche 2 (périmètre 
 
 **Fichiers** : tests/test_validate_and_clean.py, PLAN.md, PROGRESS.md.
 
+## 2026-06-13 — Phase 1 tâche 2 : tests _validate_and_clean (règles fiscales)
+
+**Tâche** : tester le forçage tps/tvq à « 0.00 » pour facture/recu et le drapeau
+d'incohérence fiscale (total > 20 $ et tvq = 0.00 → confiance abaissée + note).
+
+**Fait** : `tests/test_validate_fiscal.py` — 16 cas :
+- Forçage : facture/recu avec tps/tvq None → « 0.00 » (un seul None forcé,
+  l'autre conservé) ; valeurs fournies non écrasées ; releve/autre laissent
+  tps/tvq à None.
+- Drapeau d'incohérence : facture/recu total > 20 $ et tvq = 0.00 → confidence
+  bornée à 0.60 + note « ATTENTION » ; min() ne remonte pas une confiance déjà
+  < 0.60 ; note existante préservée. Non-déclenchement : total ≤ 20 $, borne
+  exacte 20.00 (non > 20.0), juste au-dessus 20.01 (déclenche), tvq ≠ 0.00,
+  total None, et releve (tvq non forcé donc condition fausse).
+
+**Décisions** : borne testée explicitement (20.00 vs 20.01) pour figer la
+sémantique strict `> 20.0` du code. Le cas releve confirme que le drapeau dépend
+du forçage tps/tvq (réservé à facture/recu).
+
+**Vérifications** : `python -m pytest -q` ✅ (54/54).
+
+**Fichiers** : tests/test_validate_fiscal.py, PLAN.md, PROGRESS.md.
+
 ## Décisions à valider
 
 - Contrat d'unification : un seul champ Paperless `compta_json` (texte long, JSON),

@@ -22,7 +22,7 @@ mocké, jamais d'appel réel Paperless/Claude). Jamais de déploiement automatiq
 - [x] Tests `_validate_and_clean` : normalisation des montants (« 66,81 $ » → « 66.81 »,
       valeurs nulles → None), `doc_type` invalide → « autre », filtrage des tags hors
       `ALLOWED_TAGS`, bornage des confiances [0,1].
-- [ ] Tests `_validate_and_clean` — règles fiscales : facture/recu force tps/tvq à
+- [x] Tests `_validate_and_clean` — règles fiscales : facture/recu force tps/tvq à
       « 0.00 » si None; drapeau d'incohérence (total > 20 $ et tvq = 0.00) abaisse la
       confiance et ajoute la note d'attention.
 - [ ] Tests `build_tag_updates` : tags protégés jamais retirés ni ajoutés; un seul tag
