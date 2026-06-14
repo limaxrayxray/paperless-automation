@@ -7,8 +7,8 @@
 
 set -uo pipefail
 
-MAX_ITER=40        # plafond d'itérations par lancement
-STALL_LIMIT=3      # itérations consécutives sans commit avant arrêt
+MAX_ITER="${LOOP_MAX_ITER:-40}"      # plafond d'itérations (ex. essai : LOOP_MAX_ITER=1)
+STALL_LIMIT="${LOOP_STALL_LIMIT:-3}" # itérations consécutives sans commit avant arrêt
 PAUSE_LIMITE=1800  # pause (s) quand le rate limit est atteint, puis reprise auto
 MODEL="${LOOP_MODEL:-claude-fable-5}"
 
