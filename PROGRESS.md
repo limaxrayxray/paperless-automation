@@ -5,6 +5,29 @@ DONE
 (Le loop écrit ici une entrée datée par tâche. La première ligne devient `DONE`
 quand toutes les tâches hors Phase 3 sont cochées ou BLOQUÉES.)
 
+## 2026-06-14 — Réintégration des améliorations prod (hors loop, fusion humaine)
+
+**Contexte** : le code live (`/opt/paperless/scripts`) portait des retouches faites
+directement en prod, jamais commitées : currency/supplier_foreign, détection fiscale
+affinée, tag `erreur-traitement` rejoué la nuit, nettoyage des trigger-tags,
+correspondant écrasant le faux match auto, pagination, `retry_errors.py`. Le loop
+avait écrit ses tests contre l'ancienne version GitHub → conflit.
+
+**Fait** : modifs prod sauvegardées dans la branche `prod-uncommitted`, puis
+cherry-pick dans `main` (commit `487d434`). Conflit `config.py` résolu en gardant le
+token via `.env` + les nouveaux IDs (PROTECTED réorganisé, TRIGGER_TAG_IDS,
+erreur-traitement 81, ERROR_TAG_ID/ERROR_MAX_ATTEMPTS). Tests réalignés
+(error-path → `ERROR_TAG_ID`) + nouveau `tests/test_prod_improvements.py` couvrant
+l'exemption fournisseur étranger, l'asymétrie TPS/TVQ, la normalisation devise et le
+nettoyage trigger/error-tag.
+
+**Vérifications** : `python -m pytest -q` ✅ (145/145).
+
+**Reste** : déployer `main` vers `/opt/paperless/scripts` (checkout main + pull),
+créer le champ Paperless via `ensure_compta_field.py`, puis valider `compta_json` sur
+de vraies factures avant d'attaquer le côté consommateur (compta). Branche temporaire
+`prod-uncommitted` à supprimer après confirmation du déploiement.
+
 ## 2026-06-13 — Phase 0 tâche 1 : harnais pytest
 
 **Tâche** : `requirements-dev.txt` (pytest) + note README + `pytest.ini` ciblant les tests.
