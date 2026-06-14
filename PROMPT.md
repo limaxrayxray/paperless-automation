@@ -1,8 +1,10 @@
 # Instructions de session
 
-Tu travailles sur l'automatisation Paperless de Rapidetech (voir SPEC.md). Le but
-de cette passe : rendre le pipeline robuste (tests) et persister les items de ligne
-dans le champ `compta_json` pour l'unifier avec `compta-rapidetech`.
+Tu travailles sur l'automatisation Paperless de Rapidetech (voir SPEC.md). Les
+Phases 0 à 2 (durcissement + contrat `compta_json` v1) sont faites. Le but de
+cette passe : la **Phase 4 — contrat v2** (porter `doc_type`, `currency`,
+`supplier_foreign` dans le payload et fournir un script de backfill de l'historique),
+motivée par l'audit réel du 2026-06-14. Cf. SPEC.md § contrat (version 2).
 
 ## Procédure — UNE seule tâche par session
 

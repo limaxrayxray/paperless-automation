@@ -1,9 +1,23 @@
-DONE
-
 # PROGRESS — Automatisation Paperless Rapidetech
 
 (Le loop écrit ici une entrée datée par tâche. La première ligne devient `DONE`
 quand toutes les tâches hors Phase 3 sont cochées ou BLOQUÉES.)
+
+## 2026-06-14 — Ouverture Phase 4 (contrat v2)
+
+**Contexte** : Phases 0-2 closes (le `DONE` précédent a été retiré pour rouvrir le
+loop). L'audit réel de 10 documents a montré que la v1 perd des infos utiles au
+consommateur. Nouvelle passe : porter `doc_type`, `currency`, `supplier_foreign`
+dans `compta_json` (version 2) + script de backfill de l'historique.
+
+**Décisions à valider (humain)** :
+- Périmètre v2 = `doc_type` + `currency` + `supplier_foreign` (les 3 champs déjà
+  produits par `claude_analyzer`, simplement non exportés en v1). Pas de champ
+  `confidence` ni de conversion de devise dans cette passe — devise ≠ CAD est juste
+  signalée, le consommateur tranche. Ajuster PLAN.md / SPEC.md avant de lancer si ce
+  périmètre ne convient pas.
+- Une devise ≠ CAD **ne déclenche pas** `needs_review` côté producteur (choix : le
+  consommateur décide). À confirmer.
 
 ## 2026-06-14 — Réintégration des améliorations prod (hors loop, fusion humaine)
 

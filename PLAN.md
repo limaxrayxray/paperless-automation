@@ -53,6 +53,34 @@ mocké, jamais d'appel réel Paperless/Claude). Jamais de déploiement automatiq
 - [x] `docs: contrat compta_json` — documenter le format dans README (déjà dans
       SPEC.md) et noter la version du contrat.
 
+## Phase 4 — Contrat v2 : devise, type, fournisseur étranger + backfill
+
+Motivé par l'audit du 2026-06-14 (10 docs réels) : 2/10 en USD, le type
+facture/autre est nécessaire au consommateur, et l'exemption fournisseur étranger
+doit voyager dans le payload. Cf. SPEC.md § contrat (version 2).
+
+- [ ] `compta_payload.py` : passer `COMPTA_CONTRACT_VERSION` à 2 et ajouter au
+      payload `doc_type` (depuis `analysis["doc_type"]`), `currency` (défaut « CAD »
+      si absent/vide) et `supplier_foreign` (bool, défaut `false`). Ne PAS marquer
+      `needs_review` du seul fait d'une devise ≠ CAD (c'est au consommateur de
+      décider) — mais documenter ce choix. Tests : présence des 3 champs, défauts
+      (currency manquante → « CAD », supplier_foreign manquant → false), un cas USD
+      étranger sans taxe reste cohérent (pas de `needs_review` parasite).
+- [ ] Vérifier `doc_processor.build_custom_fields` : le payload v2 est sérialisé tel
+      quel dans `compta_json` (sort_keys, ensure_ascii=False) — aucun champ v2 perdu.
+      Adapter/compléter les tests existants pour asserter les 3 nouveaux champs dans
+      le JSON écrit (client mocké).
+- [ ] Script `backfill_compta_json.py` : (re)calcule et écrit `compta_json` sur les
+      documents **déjà tagués** facture/recu qui n'ont pas encore le champ (ou l'ont
+      en v1), pour donner un historique au consommateur. Idempotent, paginé, **lecture
+      d'analyse via Claude CLI + écriture Paperless réelles** → comme
+      `ensure_compta_field.py`, écrit par le loop mais **exécuté à la main**, jamais
+      par le loop. Option `--dry-run` (défaut) qui n'écrit rien et `--limit N`.
+      Tests : la fonction pure de sélection (« quels docs backfiller ») et la
+      construction du patch, tout mocké — aucun réseau dans les tests.
+- [ ] `docs: contrat compta_json v2` — mettre à jour README (les 3 champs, la règle
+      devise, la compat v1↔v2) et noter la bascule de version.
+
 ## Phase 3 — Côté consommateur (réalisé dans le repo compta-rapidetech)
 
 Hors de ce loop (autre repo). Listé ici pour la traçabilité de l'unification :
@@ -67,8 +95,9 @@ Hors de ce loop (autre repo). Listé ici pour la traçabilité de l'unification 
 
 (Le loop ajoute ici les tâches découvertes — ne pas implémenter sans validation humaine)
 
-- Audit qualité réelle des `items` sur 3-4 vraies factures avant de s'y fier
-  (validation humaine — nécessite l'accès au Paperless de production).
+- ~~Audit qualité réelle des `items` sur de vraies factures~~ — FAIT 2026-06-14
+  (`audit_compta.py`, 10 docs). Conclusions reportées en Phase 4 (devise USD réelle,
+  besoin du type, exemption étranger). Cohérence et exemption validées sur du réel.
 - `ollama_analyzer.py` comme repli local hors-ligne (gratuit) si Claude indisponible.
 - Durcir `retry_processor.py` (verrou de fichier, backoff) + tests.
 - Micro-opti `process_document` : ne pas ré-émettre `created` dans le payload si la

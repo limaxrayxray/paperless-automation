@@ -42,9 +42,12 @@ Le seam entre `paperless-automation` (producteur) et `compta-rapidetech`
 
 ```json
 {
-  "version": 1,
+  "version": 2,
+  "doc_type": "facture | recu | releve | contrat | assurance | rapport | certificat | gouvernement | medical | impots | autre",
   "fournisseur": "string | null",
+  "supplier_foreign": false,
   "date": "YYYY-MM-DD | null",
+  "currency": "CAD",
   "total_cents": 0,
   "tps_cents": 0,
   "tvq_cents": 0,
@@ -61,13 +64,22 @@ Règles du contrat :
 
 - **Tous les montants en cents entiers.** `8000` = 80,00 $.
 - **`items[].amount_cents`** sont des montants **avant taxes**.
+- **`currency`** : code de devise du document (« CAD » par défaut). Les montants
+  restent **dans cette devise, sans conversion** — c'est au consommateur de décider
+  quoi faire d'une devise ≠ CAD (ex. brouillon `needs_review`, conversion manuelle).
+- **`doc_type`** : type classé par l'analyse. Le consommateur peut ignorer ce qui
+  n'est ni `facture` ni `recu` (un relevé ou un contrat n'est pas une dépense).
+- **`supplier_foreign`** : `true` si le fournisseur est hors Canada. Dans ce cas
+  `tps_cents = tvq_cents = 0` est **normal** (pas une incohérence).
 - **Cohérence** : `somme(items.amount_cents) + tps_cents + tvq_cents` doit égaler
   `total_cents`. Sinon `needs_review = true` et `review_reason` explique l'écart.
   Le producteur n'« invente » jamais de ligne pour forcer l'équilibre.
 - **`items` peut être `[]`** (reçu global, montant unique) — alors `needs_review`
   est `true` avec une raison; le consommateur retombe sur une ligne unique.
-- **Stabilité** : `version` permet l'évolution. Un champ inconnu du consommateur
-  est ignoré, jamais une erreur.
+- **Stabilité / compat** : `version` permet l'évolution. Un champ inconnu du
+  consommateur est ignoré, jamais une erreur (un consommateur v1 lit un payload v2
+  sans broncher). Inversement le consommateur v2 **tolère un payload v1** : champs
+  absents → défauts `currency = "CAD"`, `supplier_foreign = false`, `doc_type = null`.
 
 Côté consommateur (compta), responsabilité documentée ici pour mémoire (réalisée
 dans le repo `compta-rapidetech`) : si `compta_json` est absent, mal formé, ou
