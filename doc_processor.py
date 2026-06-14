@@ -23,9 +23,11 @@ from config import (
     CUSTOM_FIELD_IDS,
     DATE_CONFIDENCE_THRESHOLD,
     DOC_TYPE_IDS,
+    ERROR_TAG_ID,
     GLOBAL_CONFIDENCE_THRESHOLD,
     PROTECTED_TAG_IDS,
     TAG_IDS,
+    TRIGGER_TAG_IDS,
     YEAR_TAG_IDS,
 )
 
@@ -105,10 +107,17 @@ def build_tag_updates(
     else:
         tags.discard(TAG_IDS["a-verifier"])
 
+    # Une analyse réussie efface le tag d'erreur (le doc a enfin été traité)
+    tags.discard(ERROR_TAG_ID)
+
     # Garantie finale: jamais de tags protégés dans les changements qu'on fait
     # (on les garde s'ils étaient là, on n'en ajoute pas)
     protected_that_were_there = PROTECTED_TAG_IDS & set(current_tag_ids)
     tags = (tags - PROTECTED_TAG_IDS) | protected_that_were_there
+
+    # Retirer les tags de trigger (paperless-gpt-auto, etc.) — ils ont rempli
+    # leur rôle de déclencher le traitement, plus besoin de les garder.
+    tags -= TRIGGER_TAG_IDS
 
     return sorted(tags)
 
@@ -180,9 +189,9 @@ def process_document(doc_id: int) -> None:
         raise
     except Exception as e:
         log.error(f"Erreur analyse: {e}")
-        patch = {"tags": sorted(set(current_tags) | {TAG_IDS["a-verifier"]})}
+        patch = {"tags": sorted(set(current_tags) | {ERROR_TAG_ID})}
         paperless_client.patch_document(doc_id, patch)
-        log.warning("Tag a-verifier ajouté (erreur Claude)")
+        log.warning("Tag erreur-traitement ajouté (erreur Claude) — sera retenté la nuit")
         return
 
     log.info(
@@ -231,13 +240,19 @@ def process_document(doc_id: int) -> None:
         if doc.get("document_type") != new_type_id:
             payload["document_type"] = new_type_id
 
-    # Correspondant (seulement si pas déjà défini ou si Claude en trouve un meilleur)
+    # Correspondant — Claude écrase systématiquement au post_consume car
+    # un correspondant déjà présent vient du matching auto Paperless (souvent
+    # faux match, ex. "3CX" attrapé dans un PDF DigitalOcean).
     suggested_corr = analysis.get("correspondent")
-    if suggested_corr and not current_correspondent:
+    if suggested_corr:
         try:
             corr_id = paperless_client.find_or_create_correspondent(suggested_corr)
-            payload["correspondent"] = corr_id
-            log.info(f"Correspondant: '{suggested_corr}' (ID={corr_id})")
+            if corr_id != current_correspondent:
+                payload["correspondent"] = corr_id
+                log.info(
+                    f"Correspondant: '{suggested_corr}' (ID={corr_id})"
+                    + (f" [écrase ancien ID={current_correspondent}]" if current_correspondent else "")
+                )
         except Exception as e:
             log.warning(f"Erreur correspondant: {e}")
 

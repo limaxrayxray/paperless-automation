@@ -73,6 +73,18 @@ def get_documents_by_tag(tag_id: int, page_size: int = 50) -> list[dict]:
     return result.get("results", [])
 
 
+def get_all_documents_by_tag(tag_id: int) -> list[dict]:
+    """Retourne TOUS les documents (non supprimés) ayant un tag, avec pagination."""
+    docs = []
+    endpoint = f"/documents/?tags__id__all={tag_id}&page_size=100"
+    while endpoint:
+        result = _request("GET", endpoint)
+        docs.extend(result.get("results", []))
+        nxt = result.get("next")
+        endpoint = nxt[len(PAPERLESS_URL):] if nxt else None
+    return docs
+
+
 def patch_document(doc_id: int, payload: dict) -> dict:
     """Met à jour partiellement un document."""
     return _request("PATCH", f"/documents/{doc_id}/", payload)
