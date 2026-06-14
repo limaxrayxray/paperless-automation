@@ -40,11 +40,13 @@ def compta_field(monkeypatch):
 
 # ─── Tolérance : champ non configuré ─────────────────────────────────────────
 
-def test_sans_champ_compta_rien_ecrit():
-    # Par défaut compta_json n'est pas dans CUSTOM_FIELD_IDS → non écrit.
-    assert "compta_json" not in CUSTOM_FIELD_IDS
+def test_sans_champ_compta_rien_ecrit(monkeypatch):
+    # Si compta_json n'est PAS configuré, le contrat n'est pas écrit (tolérance).
+    # Le champ est désormais déployé (id réel dans config) → on simule l'absence
+    # en le retirant temporairement, ce qui exerce le garde-fou du code.
+    monkeypatch.delitem(doc_processor.CUSTOM_FIELD_IDS, "compta_json", raising=False)
     fields = _by_id(build_custom_fields([], {"doc_type": "facture", "total": "10.00"}))
-    assert COMPTA_ID not in fields
+    assert set(fields) == {TOTAL_ID}  # uniquement le champ hérité, aucun compta_json
 
 
 # ─── Champ configuré : JSON valide et conforme ───────────────────────────────

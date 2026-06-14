@@ -17,6 +17,9 @@ TPS_ID = CUSTOM_FIELD_IDS["TPS"]
 TVQ_ID = CUSTOM_FIELD_IDS["TVQ"]
 TOTAL_ID = CUSTOM_FIELD_IDS["Total"]
 FACTURE_ID = CUSTOM_FIELD_IDS["Facture"]
+# compta_json (s'il est configuré) est écrit pour TOUS les documents — c'est le
+# contrat d'unification, indépendant des champs hérités testés ici. On l'isole.
+COMPTA_ID = CUSTOM_FIELD_IDS.get("compta_json")
 
 RELEVANT_TYPES = ("facture", "recu", "releve", "contrat", "assurance", "autre")
 IRRELEVANT_TYPES = ("rapport", "manuel", "personnel", "medical", "", None)
@@ -25,6 +28,11 @@ IRRELEVANT_TYPES = ("rapport", "manuel", "personnel", "medical", "", None)
 def _by_id(payload: list[dict]) -> dict:
     """Réindexe la liste custom_fields par field id → valeur."""
     return {cf["field"]: cf["value"] for cf in payload}
+
+
+def _legacy(fields: dict) -> dict:
+    """Retire le champ compta_json pour n'asserter que sur les champs hérités."""
+    return {k: v for k, v in fields.items() if k != COMPTA_ID}
 
 
 # ─── Types pertinents : écriture des montants ────────────────────────────────
@@ -62,13 +70,14 @@ def test_types_non_pertinents_aucun_champ():
             "total": "114.98",
             "invoice_number": "INV-001",
         }
-        assert build_custom_fields([], analysis) == [], doc_type
+        # Aucun champ HÉRITÉ écrit pour un type non pertinent (compta_json à part).
+        assert _legacy(_by_id(build_custom_fields([], analysis))) == {}, doc_type
 
 
 def test_type_non_pertinent_preserve_existant():
-    # Un type non pertinent n'écrit rien mais ne détruit pas les champs existants.
+    # Un type non pertinent n'écrit aucun champ hérité mais ne détruit pas l'existant.
     existing = [{"field": TOTAL_ID, "value": "99.99"}]
-    fields = _by_id(build_custom_fields(existing, {"doc_type": "rapport", "total": "1.00"}))
+    fields = _legacy(_by_id(build_custom_fields(existing, {"doc_type": "rapport", "total": "1.00"})))
     assert fields == {TOTAL_ID: "99.99"}
 
 
@@ -82,7 +91,7 @@ def test_montants_none_non_ecrits():
         "total": "50.00",
         "invoice_number": None,
     }
-    fields = _by_id(build_custom_fields([], analysis))
+    fields = _legacy(_by_id(build_custom_fields([], analysis)))
     assert fields == {TOTAL_ID: "50.00"}
     assert TPS_ID not in fields
     assert TVQ_ID not in fields
@@ -90,8 +99,8 @@ def test_montants_none_non_ecrits():
 
 
 def test_champs_absents_non_ecrits():
-    # Clés absentes de l'analyse → traitées comme None, rien écrit.
-    fields = _by_id(build_custom_fields([], {"doc_type": "facture"}))
+    # Clés absentes de l'analyse → traitées comme None, aucun champ hérité écrit.
+    fields = _legacy(_by_id(build_custom_fields([], {"doc_type": "facture"})))
     assert fields == {}
 
 
