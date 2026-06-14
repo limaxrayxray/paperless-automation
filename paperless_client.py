@@ -86,6 +86,12 @@ def get_all_documents_by_tag(tag_id: int) -> list[dict]:
     return docs
 
 
+def get_recent_documents(count: int = 10) -> list[dict]:
+    """Retourne les `count` documents les plus récents (par date de création desc)."""
+    result = _request("GET", f"/documents/?ordering=-created&page_size={count}")
+    return result.get("results", [])
+
+
 def patch_document(doc_id: int, payload: dict) -> dict:
     """Met à jour partiellement un document."""
     return _request("PATCH", f"/documents/{doc_id}/", payload)
