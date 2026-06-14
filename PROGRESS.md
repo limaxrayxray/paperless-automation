@@ -60,6 +60,30 @@ mocks + premiers tests). Prochaine : Phase 1 (durcir l'existant) — `_validate_
 
 **Fichiers** : tests/test_claude_analyzer.py, PLAN.md, PROGRESS.md.
 
+## 2026-06-13 — Phase 1 tâche 1 : tests _validate_and_clean (base)
+
+**Tâche** : tests de `claude_analyzer._validate_and_clean` — normalisation des
+montants, `doc_type`/`context` invalides → défaut, filtrage des tags hors
+`ALLOWED_TAGS`, bornage des confiances [0,1].
+
+**Fait** : `tests/test_validate_and_clean.py` — 25 cas :
+- Montants : « 66,81 $ » → « 66.81 », point décimal conservé, nombre natif → « 5.00 »,
+  None reste None, chaîne illisible → None, normalisation simultanée total/tps/tvq.
+- doc_type : invalide/absent → « autre », valide conservé. context : invalide →
+  « rapidetech », « personnel » conservé.
+- Tags : filtrage hors `ALLOWED_TAGS` (personnel/impots/inconnu retirés), tous valides
+  conservés, non-liste → [], absent → [].
+- Confiances : >1 → 1.0, <0 → 0.0, illisible/None → 0.5, valide conservée.
+- invoice_number/date/correspondent : « null » → None, normalisation (strip), date
+  invalide → None + date_confidence 0.0, date valide conservée.
+
+**Décisions** : montants testés avec `doc_type="autre"` pour éviter le forçage tps/tvq
+et le drapeau d'incohérence fiscale, qui relèvent de la tâche 2 (périmètre séparé).
+
+**Vérifications** : `python -m pytest -q` ✅ (38/38).
+
+**Fichiers** : tests/test_validate_and_clean.py, PLAN.md, PROGRESS.md.
+
 ## Décisions à valider
 
 - Contrat d'unification : un seul champ Paperless `compta_json` (texte long, JSON),

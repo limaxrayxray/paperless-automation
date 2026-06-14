@@ -6,3 +6,5 @@ __pycache__/
 loop.log
 .venv/
 .pytest_cache/
+# Copie/clone imbriqué accidentel du projet — ne pas versionner
+paperless-automation/

@@ -19,7 +19,7 @@ mocké, jamais d'appel réel Paperless/Claude). Jamais de déploiement automatiq
 
 ## Phase 1 — Durcir l'extraction existante (tests sur le code en place)
 
-- [ ] Tests `_validate_and_clean` : normalisation des montants (« 66,81 $ » → « 66.81 »,
+- [x] Tests `_validate_and_clean` : normalisation des montants (« 66,81 $ » → « 66.81 »,
       valeurs nulles → None), `doc_type` invalide → « autre », filtrage des tags hors
       `ALLOWED_TAGS`, bornage des confiances [0,1].
 - [ ] Tests `_validate_and_clean` — règles fiscales : facture/recu force tps/tvq à

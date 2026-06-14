@@ -10,7 +10,7 @@ set -uo pipefail
 MAX_ITER="${LOOP_MAX_ITER:-40}"      # plafond d'itérations (ex. essai : LOOP_MAX_ITER=1)
 STALL_LIMIT="${LOOP_STALL_LIMIT:-3}" # itérations consécutives sans commit avant arrêt
 PAUSE_LIMITE=1800  # pause (s) quand le rate limit est atteint, puis reprise auto
-MODEL="${LOOP_MODEL:-claude-fable-5}"
+MODEL="${LOOP_MODEL:-claude-opus-4-8}"
 
 # Webhook de notification, optionnel — via .env / environnement, jamais en dur.
 [ -f .env ] && set -a && . ./.env && set +a
@@ -38,7 +38,7 @@ for i in $(seq 1 "$MAX_ITER"); do
   fi
 
   # Session Claude Code avec le prompt fixe — sortie à l'écran ET dans le log
-  claude -p "$(cat PROMPT.md)" \
+  IS_SANDBOX=1  claude -p "$(cat PROMPT.md)" \
     --model "$MODEL" \
     --dangerously-skip-permissions 2>&1 | tee -a loop.log
   output=$(tail -n 30 loop.log)
