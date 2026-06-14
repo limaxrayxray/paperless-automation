@@ -3,6 +3,33 @@
 (Le loop écrit ici une entrée datée par tâche. La première ligne devient `DONE`
 quand toutes les tâches hors Phase 3 sont cochées ou BLOQUÉES.)
 
+## 2026-06-14 — Phase 4 tâche 1 : compta_payload v2 (doc_type, currency, supplier_foreign)
+
+**Tâche** : passer `COMPTA_CONTRACT_VERSION` à 2 et porter `doc_type`, `currency`
+(défaut « CAD »), `supplier_foreign` (bool, défaut false) dans le payload.
+
+**Fait** :
+- `compta_payload.py` : `COMPTA_CONTRACT_VERSION = 2`. Ajout au dict retourné de
+  `doc_type` (`analysis.get("doc_type")`, None si absent), `supplier_foreign`
+  (`bool(analysis.get("supplier_foreign", False))`) et `currency` (normalisée
+  `.strip().upper()`, défaut « CAD » si absente/vide/None). Aucune logique de
+  `needs_review` ajoutée pour une devise ≠ CAD — choix documenté en commentaire :
+  le consommateur tranche (conforme à SPEC.md § contrat v2).
+- `tests/test_compta_payload.py` — 10 nouveaux cas : version == 2, présence des 3
+  champs, doc_type repris/absent→None, currency défaut CAD (absente/vide/None),
+  normalisation majuscules, supplier_foreign défaut false / true conservé, et le cas
+  réel USD fournisseur étranger sans taxe qui reste cohérent (pas de needs_review).
+
+**Décisions** : `doc_type` absent → None (pas « autre ») au niveau du payload —
+`claude_analyzer._validate_and_clean` force déjà « autre » en amont ; le payload se
+contente de relayer ce qu'il reçoit, sans re-valider. Normalisation `currency`
+dupliquée volontairement ici (le payload doit rester robuste même si l'analyse
+n'est pas passée par le validateur, ex. backfill).
+
+**Vérifications** : `python -m pytest -q` ✅ (159/159).
+
+**Fichiers** : compta_payload.py, tests/test_compta_payload.py, PLAN.md, PROGRESS.md.
+
 ## 2026-06-14 — Ouverture Phase 4 (contrat v2)
 
 **Contexte** : Phases 0-2 closes (le `DONE` précédent a été retiré pour rouvrir le

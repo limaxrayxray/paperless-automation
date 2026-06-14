@@ -189,3 +189,83 @@ def test_item_amount_illisible_vaut_zero():
     ])
     payload = build_compta_payload(analysis)
     assert payload["items"][0]["amount_cents"] == 0
+
+
+# ─── Contrat v2 : doc_type, currency, supplier_foreign ───────────────────────
+
+def test_version_contrat_est_2():
+    assert COMPTA_CONTRACT_VERSION == 2
+    payload = build_compta_payload(_facture())
+    assert payload["version"] == 2
+
+
+def test_v2_champs_presents():
+    analysis = _facture(doc_type="facture", currency="CAD", supplier_foreign=False)
+    payload = build_compta_payload(analysis)
+    assert payload["doc_type"] == "facture"
+    assert payload["currency"] == "CAD"
+    assert payload["supplier_foreign"] is False
+
+
+def test_doc_type_repris_de_lanalyse():
+    payload = build_compta_payload(_facture(doc_type="recu"))
+    assert payload["doc_type"] == "recu"
+
+
+def test_doc_type_absent_reste_none():
+    analysis = _facture()
+    del analysis["doc_type"]
+    payload = build_compta_payload(analysis)
+    assert payload["doc_type"] is None
+
+
+def test_currency_defaut_cad_si_absente():
+    analysis = _facture()
+    assert "currency" not in analysis
+    payload = build_compta_payload(analysis)
+    assert payload["currency"] == "CAD"
+
+
+def test_currency_defaut_cad_si_vide():
+    payload = build_compta_payload(_facture(currency=""))
+    assert payload["currency"] == "CAD"
+    payload = build_compta_payload(_facture(currency=None))
+    assert payload["currency"] == "CAD"
+
+
+def test_currency_normalisee_majuscules():
+    payload = build_compta_payload(_facture(currency=" usd "))
+    assert payload["currency"] == "USD"
+
+
+def test_supplier_foreign_defaut_false():
+    analysis = _facture()
+    assert "supplier_foreign" not in analysis
+    payload = build_compta_payload(analysis)
+    assert payload["supplier_foreign"] is False
+
+
+def test_supplier_foreign_true_conserve():
+    payload = build_compta_payload(_facture(supplier_foreign=True))
+    assert payload["supplier_foreign"] is True
+
+
+def test_usd_etranger_sans_taxe_reste_coherent():
+    # Fournisseur étranger payé en USD, sans TPS/TVQ : NORMAL, pas de needs_review
+    # parasite tant que somme(items) + taxes == total.
+    analysis = _facture(
+        doc_type="facture",
+        currency="USD",
+        supplier_foreign=True,
+        total="100.00",
+        tps=None,
+        tvq=None,
+        line_items=[{"description": "Cloudflare", "amount": 100.00, "taxable": True}],
+    )
+    payload = build_compta_payload(analysis)
+    assert payload["currency"] == "USD"
+    assert payload["supplier_foreign"] is True
+    assert payload["tps_cents"] == 0
+    assert payload["tvq_cents"] == 0
+    assert payload["needs_review"] is False
+    assert payload["review_reason"] is None

@@ -14,7 +14,8 @@ from decimal import InvalidOperation
 
 # Version du contrat. Incrémenter à chaque changement de format observable par le
 # consommateur (compta-rapidetech). Un champ inconnu côté consommateur est ignoré.
-COMPTA_CONTRACT_VERSION = 1
+# v2 (2026-06-14) : ajoute doc_type, currency, supplier_foreign au payload.
+COMPTA_CONTRACT_VERSION = 2
 
 
 def _to_cents(value) -> int | None:
@@ -77,10 +78,19 @@ def build_compta_payload(analysis: dict) -> dict:
     needs_review = bool(reasons)
     review_reason = "; ".join(reasons) if reasons else None
 
+    # v2 : type de document, devise et exemption fournisseur étranger voyagent dans
+    # le payload. Une devise ≠ CAD n'est PAS marquée needs_review côté producteur —
+    # c'est au consommateur (compta-rapidetech) de décider quoi en faire (cf. SPEC.md).
+    raw_currency = analysis.get("currency")
+    currency = str(raw_currency).strip().upper() if raw_currency else "CAD"
+
     return {
         "version": COMPTA_CONTRACT_VERSION,
+        "doc_type": analysis.get("doc_type"),
         "fournisseur": analysis.get("correspondent"),
+        "supplier_foreign": bool(analysis.get("supplier_foreign", False)),
         "date": analysis.get("date"),
+        "currency": currency or "CAD",
         "total_cents": total_cents,
         "tps_cents": tps_cents,
         "tvq_cents": tvq_cents,

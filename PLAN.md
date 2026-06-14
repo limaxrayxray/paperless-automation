@@ -59,7 +59,7 @@ Motivé par l'audit du 2026-06-14 (10 docs réels) : 2/10 en USD, le type
 facture/autre est nécessaire au consommateur, et l'exemption fournisseur étranger
 doit voyager dans le payload. Cf. SPEC.md § contrat (version 2).
 
-- [ ] `compta_payload.py` : passer `COMPTA_CONTRACT_VERSION` à 2 et ajouter au
+- [x] `compta_payload.py` : passer `COMPTA_CONTRACT_VERSION` à 2 et ajouter au
       payload `doc_type` (depuis `analysis["doc_type"]`), `currency` (défaut « CAD »
       si absent/vide) et `supplier_foreign` (bool, défaut `false`). Ne PAS marquer
       `needs_review` du seul fait d'une devise ≠ CAD (c'est au consommateur de
