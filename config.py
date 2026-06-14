@@ -1,10 +1,38 @@
 """Configuration centrale pour le processeur de documents Rapidetech."""
 
-PAPERLESS_URL = "http://localhost:8000/api"
-PAPERLESS_TOKEN = "ca37cac25733d04b2ead0aaa9eeaf2da8f801239"
+import os
+from pathlib import Path
 
-CLAUDE_BIN = "/root/.local/bin/claude"
-LOG_FILE = "/opt/paperless/scripts/logs/processor.log"
+
+def _load_dotenv() -> None:
+    """Charge un fichier .env situé à côté de ce module (lignes `clé=valeur`),
+    sans dépendance externe (stdlib uniquement). Les variables déjà présentes
+    dans l'environnement ne sont jamais écrasées — priorité au shell/systemd."""
+    env_path = Path(__file__).parent / ".env"
+    if not env_path.exists():
+        return
+    for raw in env_path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
+
+
+_load_dotenv()
+
+PAPERLESS_URL = os.environ.get("PAPERLESS_URL", "http://localhost:8000/api")
+
+# Secret : jamais en dur. Fourni par l'environnement ou un fichier .env (gitignoré).
+PAPERLESS_TOKEN = os.environ.get("PAPERLESS_TOKEN")
+if not PAPERLESS_TOKEN:
+    raise RuntimeError(
+        "PAPERLESS_TOKEN manquant : définissez-le dans l'environnement ou dans un "
+        "fichier .env à côté de config.py (voir .env.example). Jamais de secret en dur."
+    )
+
+CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "/root/.local/bin/claude")
+LOG_FILE = os.environ.get("LOG_FILE", "/opt/paperless/scripts/logs/processor.log")
 
 # ─── TAGS PROTÉGÉS ────────────────────────────────────────────────────────────
 # NE JAMAIS assigner, modifier ou retirer ces tags automatiquement
