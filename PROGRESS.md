@@ -192,6 +192,32 @@ inchangé), hors périmètre de cette tâche.
 
 **Fichiers** : tests/test_process_document_idempotent.py, PLAN.md, PROGRESS.md.
 
+## 2026-06-13 — Phase 1 tâche 6 : test du chemin d'erreur (Phase 1 terminée)
+
+**Tâche** : vérifier que si `analyze_document_smart` lève, `process_document`
+appose `a-verifier` et ne remonte aucune exception — sauf `RateLimitError`, qui
+doit remonter telle quelle (gérée par l'appelant pour mise en queue / rejeu).
+
+**Fait** : `tests/test_process_document_error_path.py` — 7 cas. Stub qui lève
+(monkeypatch de `claude_analyzer.analyze_document_smart`), client `fake_paperless`
+en mémoire :
+- Erreur générique (RuntimeError/ValueError) → `a-verifier` ajouté, aucune
+  exception ; tags existants préservés (union, sans doublon) ; tag protégé
+  conservé ; aucune classification posée (titre/type/champs/correspondant
+  inchangés, seul `a-verifier` change) ; deux échecs → un seul `a-verifier`,
+  état stable (idempotence du repli).
+- `RateLimitError` : remonte (`pytest.raises`) et ne pose PAS `a-verifier` — le
+  document reste intact pour être rejoué.
+
+**Décisions** : assertions sur l'état final du `fake_paperless` (cohérent avec le
+style de la tâche 5). Le cas rate limit vérifie l'absence d'effet de bord (tags
+vides), garantissant qu'un rejeu repart d'un document propre.
+
+**Vérifications** : `python -m pytest -q` ✅ (101/101). **Phase 1 complète.**
+Prochaine : Phase 2 (contrat `compta_json`) — `ensure_compta_field.py`.
+
+**Fichiers** : tests/test_process_document_error_path.py, PLAN.md, PROGRESS.md.
+
 ## Décisions à valider
 
 - Contrat d'unification : un seul champ Paperless `compta_json` (texte long, JSON),

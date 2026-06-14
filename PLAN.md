@@ -33,7 +33,7 @@ mocké, jamais d'appel réel Paperless/Claude). Jamais de déploiement automatiq
 - [x] Test d'idempotence de `process_document` (client mocké) : deux passages
       successifs sur le même document convergent (mêmes tags/champs finaux, aucun
       doublon de tag).
-- [ ] Test du chemin d'erreur : si l'analyse Claude lève, `process_document` ajoute
+- [x] Test du chemin d'erreur : si l'analyse Claude lève, `process_document` ajoute
       `a-verifier` et n'élève aucune exception (sauf RateLimitError, qui remonte).
 
 ## Phase 2 — Contrat d'unification `compta_json`
