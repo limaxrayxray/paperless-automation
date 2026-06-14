@@ -38,7 +38,7 @@ mocké, jamais d'appel réel Paperless/Claude). Jamais de déploiement automatiq
 
 ## Phase 2 — Contrat d'unification `compta_json`
 
-- [ ] Script `ensure_compta_field.py` : crée (idempotent) le champ personnalisé
+- [x] Script `ensure_compta_field.py` : crée (idempotent) le champ personnalisé
       `compta_json` (type texte long) via l'API Paperless s'il n'existe pas, et
       affiche son id; ajouter l'id à `CUSTOM_FIELD_IDS` dans `config.py`. Script à
       exécuter manuellement une fois (jamais par le loop — appel réseau réel).

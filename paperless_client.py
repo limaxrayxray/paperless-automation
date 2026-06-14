@@ -5,7 +5,8 @@ import urllib.error
 import urllib.request
 from typing import Any
 
-from config import PAPERLESS_TOKEN, PAPERLESS_URL
+from config import PAPERLESS_TOKEN
+from config import PAPERLESS_URL
 
 
 def _request(
@@ -108,3 +109,23 @@ def get_tag_ids_by_name(names: list[str]) -> dict[str, int]:
     result = _request("GET", "/tags/?page_size=200")
     tag_map = {t["name"]: t["id"] for t in result.get("results", [])}
     return {n: tag_map[n] for n in names if n in tag_map}
+
+
+def get_custom_fields() -> list[dict]:
+    """Retourne tous les champs personnalisés définis dans Paperless."""
+    result = _request("GET", "/custom_fields/?page_size=200")
+    return result.get("results", [])
+
+
+def create_custom_field(name: str, data_type: str = "string") -> dict:
+    """Crée un champ personnalisé et retourne sa représentation (incl. 'id')."""
+    return _request("POST", "/custom_fields/", {"name": name, "data_type": data_type})
+
+
+def find_or_create_custom_field(name: str, data_type: str = "string") -> dict:
+    """Trouve un champ personnalisé par nom (insensible à la casse) ou le crée.
+    Idempotent : ne crée jamais de doublon."""
+    for field in get_custom_fields():
+        if field.get("name", "").lower() == name.lower():
+            return field
+    return create_custom_field(name, data_type)

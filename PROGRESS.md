@@ -218,6 +218,42 @@ Prochaine : Phase 2 (contrat `compta_json`) — `ensure_compta_field.py`.
 
 **Fichiers** : tests/test_process_document_error_path.py, PLAN.md, PROGRESS.md.
 
+## 2026-06-14 — Phase 2 tâche 1 : ensure_compta_field.py
+
+**Tâche** : script idempotent qui crée le champ personnalisé `compta_json` (texte
+long) via l'API Paperless et inscrit son id dans `CUSTOM_FIELD_IDS` (config.py).
+Exécuté manuellement (appel réseau réel — jamais par le loop).
+
+**Fait** :
+- `paperless_client.py` : ajout de `get_custom_fields`, `create_custom_field` et
+  `find_or_create_custom_field` (recherche insensible à la casse, idempotente —
+  aucun doublon). Mêmes conventions stdlib/urllib que le reste du client.
+- `ensure_compta_field.py` : entête d'avertissement « APPEL RÉSEAU RÉEL — jamais
+  par le loop ». `main()` ensure le champ puis met à jour config.py. Type de champ
+  `longtext` (Paperless-ngx expose bien un type « Long Text », plus adapté que
+  `string` mono-ligne) — cf. `FieldDataType.LONG_TEXT` dans le modèle paperless.
+  `inject_field_id_into_config(source, name, id)` : transformation de texte pure
+  (regex sur le bloc `CUSTOM_FIELD_IDS = {…}`), insère ou met à jour l'entrée,
+  idempotente, lève `ValueError` si le bloc est absent.
+- `tests/test_ensure_compta_field.py` — 8 cas : idempotence de
+  `find_or_create_custom_field` (existant insensible à la casse → jamais créé ;
+  absent → créé une fois ; second appel ne recrée pas) ; injection (ajout si
+  absent, mise à jour de valeur sans doublon, idempotence même id, `ValueError`
+  sans bloc, et application au **vrai** config.py qui reste un Python valide avec
+  `compta_json` posé et entrées héritées préservées).
+
+**Décisions** : config.py mis à jour par réécriture de texte (regex) plutôt que par
+une clé lue depuis l'env — respecte la lettre du PLAN (« ajouter l'id à
+CUSTOM_FIELD_IDS dans config.py ») et garde la config auto-suffisante. Le loop ne
+modifie PAS config.py lui-même : `compta_json` n'est pas encore dans
+`CUSTOM_FIELD_IDS` (l'id réel sera connu à l'exécution manuelle du script). La
+tâche 3 (branchement dans `build_custom_fields`) devra donc tolérer son absence.
+
+**Vérifications** : `python -m pytest -q` ✅ (109/109).
+
+**Fichiers** : ensure_compta_field.py, paperless_client.py,
+tests/test_ensure_compta_field.py, PLAN.md, PROGRESS.md.
+
 ## Décisions à valider
 
 - Contrat d'unification : un seul champ Paperless `compta_json` (texte long, JSON),
