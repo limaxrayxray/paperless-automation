@@ -161,6 +161,37 @@ aucune valeur None écrite.
 
 **Fichiers** : tests/test_build_custom_fields.py, PLAN.md, PROGRESS.md.
 
+## 2026-06-13 — Phase 1 tâche 5 : test d'idempotence de process_document
+
+**Tâche** : vérifier que deux passages successifs de `process_document` sur le
+même document convergent (mêmes tags/champs/titre/date finaux, aucun doublon).
+
+**Fait** : `tests/test_process_document_idempotent.py` — 6 cas. Stub déterministe
+de `claude_analyzer.analyze_document_smart` (aucun appel CLI/vision), client
+`fake_paperless` en mémoire ; on traite deux fois et on compare les snapshots :
+- État final strictement identique d'un passage à l'autre (cas facture fiable).
+- Tags : aucun doublon, tag protégé conservé, classification facture + année 2026
+  appliquées, pas de `a-verifier` (confiance haute).
+- Custom fields : un seul enregistrement par field id, valeurs Total/Facture
+  correctes et stables.
+- Correspondant créé une seule fois (second passage : `current_correspondent`
+  déjà posé → pas de re-création).
+- Confiance basse : `a-verifier` ajouté exactement une fois, pas de tag année,
+  état stable.
+- Document déjà traité : `document_type`/titre posés au 1er passage, inchangés
+  ensuite.
+
+**Décisions** : assertion d'idempotence portée sur l'**égalité des snapshots du
+document** (état final) plutôt que sur un payload vide au 2e passage, car
+`process_document` ré-émet toujours `created` (valeur identique) sans comparer la
+date courante — patch redondant mais sans effet de bord (état convergé, zéro
+doublon). Noté en backlog comme micro-optimisation (ne pas patcher si `created`
+inchangé), hors périmètre de cette tâche.
+
+**Vérifications** : `python -m pytest -q` ✅ (94/94).
+
+**Fichiers** : tests/test_process_document_idempotent.py, PLAN.md, PROGRESS.md.
+
 ## Décisions à valider
 
 - Contrat d'unification : un seul champ Paperless `compta_json` (texte long, JSON),

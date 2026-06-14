@@ -30,7 +30,7 @@ mocké, jamais d'appel réel Paperless/Claude). Jamais de déploiement automatiq
       selon `GLOBAL_CONFIDENCE_THRESHOLD`; règle medical → personnel.
 - [x] Tests `build_custom_fields` : TPS/TVQ/Total/Facture écrits seulement pour les
       types pertinents; valeurs existantes préservées; aucune valeur None écrite.
-- [ ] Test d'idempotence de `process_document` (client mocké) : deux passages
+- [x] Test d'idempotence de `process_document` (client mocké) : deux passages
       successifs sur le même document convergent (mêmes tags/champs finaux, aucun
       doublon de tag).
 - [ ] Test du chemin d'erreur : si l'analyse Claude lève, `process_document` ajoute
@@ -71,3 +71,6 @@ Hors de ce loop (autre repo). Listé ici pour la traçabilité de l'unification 
   (validation humaine — nécessite l'accès au Paperless de production).
 - `ollama_analyzer.py` comme repli local hors-ligne (gratuit) si Claude indisponible.
 - Durcir `retry_processor.py` (verrou de fichier, backoff) + tests.
+- Micro-opti `process_document` : ne pas ré-émettre `created` dans le payload si la
+  date courante du doc est déjà identique (patch redondant aujourd'hui — sans effet
+  de bord, idempotence OK, mais une écriture inutile par re-traitement).
