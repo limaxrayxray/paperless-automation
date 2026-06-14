@@ -107,6 +107,37 @@ du forçage tps/tvq (réservé à facture/recu).
 
 **Fichiers** : tests/test_validate_fiscal.py, PLAN.md, PROGRESS.md.
 
+## 2026-06-13 — Phase 1 tâche 3 : tests build_tag_updates
+
+**Tâche** : tester `doc_processor.build_tag_updates` — tags protégés intouchés,
+un seul tag année à la fois (seuil `DATE_CONFIDENCE_THRESHOLD`), `a-verifier`
+selon `GLOBAL_CONFIDENCE_THRESHOLD`, règle medical → personnel.
+
+**Fait** : `tests/test_build_tag_updates.py` — 24 cas :
+- Protégés : conservés s'ils étaient là, jamais ajoutés (disjoint quand absents),
+  cohabitent avec le remplacement de classification.
+- Classification : ancien type remplacé par le nouveau ; `doc_type` invalide
+  n'ajoute rien ; doc_type valide ajouté.
+- `tags_to_add` : autorisé ajouté ; hors `ALLOWED_TAGS` (impots) ignoré ;
+  inconnu ignoré.
+- medical → personnel (via `tags_to_add` et via `doc_type`) ; personnel existant
+  jamais retiré.
+- Tag année : ajouté si conf haute, pas si basse, borne seuil incluse (>=),
+  absent si `date_confidence` non fourni, un seul à la fois (remplacement),
+  année inconnue / date malformée → aucun tag ni crash.
+- `a-verifier` : ajouté si conf basse / absente, retiré si conf haute, borne
+  seuil exclue (condition `< seuil`).
+- Sortie triée et sans doublon.
+
+**Décisions** : `confidence` fourni explicitement (>= seuil) dans les cas ne
+portant pas sur `a-verifier`, car son défaut (0) déclencherait le tag et
+brouillerait les assertions. IDs et seuils importés de `config` plutôt
+qu'écrits en dur.
+
+**Vérifications** : `python -m pytest -q` ✅ (78/78).
+
+**Fichiers** : tests/test_build_tag_updates.py, PLAN.md, PROGRESS.md.
+
 ## Décisions à valider
 
 - Contrat d'unification : un seul champ Paperless `compta_json` (texte long, JSON),

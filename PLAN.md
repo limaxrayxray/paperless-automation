@@ -25,7 +25,7 @@ mocké, jamais d'appel réel Paperless/Claude). Jamais de déploiement automatiq
 - [x] Tests `_validate_and_clean` — règles fiscales : facture/recu force tps/tvq à
       « 0.00 » si None; drapeau d'incohérence (total > 20 $ et tvq = 0.00) abaisse la
       confiance et ajoute la note d'attention.
-- [ ] Tests `build_tag_updates` : tags protégés jamais retirés ni ajoutés; un seul tag
+- [x] Tests `build_tag_updates` : tags protégés jamais retirés ni ajoutés; un seul tag
       année à la fois (selon `DATE_CONFIDENCE_THRESHOLD`); `a-verifier` ajouté/retiré
       selon `GLOBAL_CONFIDENCE_THRESHOLD`; règle medical → personnel.
 - [ ] Tests `build_custom_fields` : TPS/TVQ/Total/Facture écrits seulement pour les
