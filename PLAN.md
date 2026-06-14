@@ -70,7 +70,7 @@ doit voyager dans le payload. Cf. SPEC.md § contrat (version 2).
       quel dans `compta_json` (sort_keys, ensure_ascii=False) — aucun champ v2 perdu.
       Adapter/compléter les tests existants pour asserter les 3 nouveaux champs dans
       le JSON écrit (client mocké).
-- [ ] Script `backfill_compta_json.py` : (re)calcule et écrit `compta_json` sur les
+- [x] Script `backfill_compta_json.py` : (re)calcule et écrit `compta_json` sur les
       documents **déjà tagués** facture/recu qui n'ont pas encore le champ (ou l'ont
       en v1), pour donner un historique au consommateur. Idempotent, paginé, **lecture
       d'analyse via Claude CLI + écriture Paperless réelles** → comme

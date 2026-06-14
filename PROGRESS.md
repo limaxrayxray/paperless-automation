@@ -3,6 +3,50 @@
 (Le loop écrit ici une entrée datée par tâche. La première ligne devient `DONE`
 quand toutes les tâches hors Phase 3 sont cochées ou BLOQUÉES.)
 
+## 2026-06-14 — Phase 4 tâche 3 : backfill_compta_json.py
+
+**Tâche** : script (re)calculant et écrivant `compta_json` sur les documents déjà
+tagués facture/recu sans le champ (ou en v1), pour donner un historique au
+consommateur. Idempotent, paginé, dry-run par défaut, `--limit N`. Appels réels
+(Claude CLI + Paperless) → écrit par le loop, exécuté à la main. Tests : fonction
+pure de sélection + construction du patch, tout mocké, zéro réseau.
+
+**Fait** :
+- `backfill_compta_json.py` :
+  - `_compta_version(doc, field_id)` : lit la version du `compta_json` présent (None
+    si absent/vide/JSON cassé/version non-int).
+  - `needs_backfill(doc, field_id, target_version=COMPTA_CONTRACT_VERSION)` : True si
+    absent/illisible ou version < cible → idempotence (doc déjà à jour ignoré).
+  - `select_documents_to_backfill(docs, field_id, limit)` : filtre + `--limit`. Pures.
+  - `build_backfill_patch(existing_cf, analysis, field_id)` : sérialise le payload v2
+    (sort_keys, ensure_ascii=False, identique à doc_processor) et le fusionne via
+    `paperless_client.build_custom_fields_payload` → préserve les champs hérités,
+    écrase une éventuelle v1, jamais de doublon. Pure.
+  - `_fetch_candidate_documents()` (réseau) : docs tagués facture+recu dédupliqués via
+    `get_all_documents_by_tag`. `main()` : argparse `--dry-run`
+    (BooleanOptionalAction, défaut True → `--no-dry-run` pour appliquer) + `--limit`,
+    en-tête d'avertissement « APPELS RÉSEAU RÉELS — jamais par le loop », garde si
+    `compta_json` absent de `CUSTOM_FIELD_IDS`.
+- `tests/test_backfill_compta_json.py` — 21 cas : needs_backfill (absent, autres
+  champs, v1, version courante/supérieure, valeur vide/None, JSON cassé, version
+  non-int, target_version explicite) ; sélection (filtre les à-jour, limit, limit
+  None/0, liste vide) ; patch (compta_json valide v2, champs v2 USD étranger sans
+  needs_review parasite, préservation des champs existants, écrasement v1 sans
+  doublon, sérialisation stable, accents lisibles).
+
+**Décisions** : critère de backfill = `version < COMPTA_CONTRACT_VERSION` (et
+absent/illisible) plutôt que « champ absent uniquement » — un doc en v1 doit gagner
+les champs v2. `main`/`_fetch_candidate_documents` non testés (seuls à faire du
+réseau), conforme à la consigne. Réutilise `build_custom_fields_payload` (pure) pour
+rester aligné sur `doc_processor.build_custom_fields`. Ruff a auto-fixé `audit_compta.py`
+(fichier hors scope) → reverté pour garder le commit borné ; T201/EXE001 restants sur
+le script suivent la convention des scripts manuels du repo (idem ensure_compta_field.py).
+
+**Vérifications** : `python -m pytest -q` ✅ (183/183).
+
+**Fichiers** : backfill_compta_json.py, tests/test_backfill_compta_json.py, PLAN.md,
+PROGRESS.md.
+
 ## 2026-06-14 — Phase 4 tâche 2 : v2 sérialisé tel quel dans compta_json
 
 **Tâche** : vérifier que `doc_processor.build_custom_fields` sérialise le payload v2
