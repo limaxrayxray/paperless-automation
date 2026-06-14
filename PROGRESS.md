@@ -1,3 +1,5 @@
+DONE
+
 # PROGRESS — Automatisation Paperless Rapidetech
 
 (Le loop écrit ici une entrée datée par tâche. La première ligne devient `DONE`
@@ -322,6 +324,31 @@ travail inutile et rend l'intention claire.
 
 **Fichiers** : doc_processor.py, tests/test_build_custom_fields_compta.py,
 PLAN.md, PROGRESS.md.
+
+## 2026-06-14 — Phase 2 tâche 4 : docs contrat compta_json (Phase 2 terminée)
+
+**Tâche** : documenter le format du contrat `compta_json` dans le README (référence
+SPEC.md) et noter la version du contrat.
+
+**Fait** :
+- `README.md` : nouvelle section « Contrat `compta_json` (unification avec
+  compta-rapidetech) » avant le déploiement. Décrit le seam (champ texte long,
+  analyse unique côté producteur), la **version courante `1`**
+  (`COMPTA_CONTRACT_VERSION` dans `compta_payload.py`), le schéma JSON, les règles
+  (cents entiers, items avant taxes, cohérence somme+taxes == total → `needs_review`,
+  items vides → repli ligne unique), et le rappel que le champ se crée manuellement
+  via `ensure_compta_field.py` (jamais par le loop) avec id dans `CUSTOM_FIELD_IDS`.
+
+**Décisions** : doc placée dans README (pas de nouveau fichier) pour rester proche
+du point d'entrée du repo ; le schéma reprend celui de SPEC.md sans le dupliquer
+comme source de vérité (renvoi explicite à SPEC.md). Tâche purement documentaire :
+aucun code touché, gate inchangé.
+
+**Vérifications** : `python -m pytest -q` ✅ (136/136). **Phase 2 complète.** Toutes
+les tâches hors Phase 3 sont cochées → `DONE` en première ligne. Phase 3 est réalisée
+dans le repo `compta-rapidetech`.
+
+**Fichiers** : README.md, PLAN.md, PROGRESS.md.
 
 ## Décisions à valider
 

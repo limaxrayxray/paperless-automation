@@ -29,6 +29,51 @@ pip install -r requirements-dev.txt
 python -m pytest -q
 ```
 
+## Contrat `compta_json` (unification avec compta-rapidetech)
+
+Le seam entre ce repo (producteur) et `compta-rapidetech` (consommateur) est un
+**champ personnalisé Paperless de type texte long** nommé `compta_json`, contenant
+un objet JSON unique et auto-suffisant. L'analyse n'est faite **qu'une fois** ici;
+compta ne ré-extrait jamais. Le contrat de référence est dans [SPEC.md](SPEC.md);
+le producteur est `compta_payload.build_compta_payload`.
+
+**Version courante du contrat : `1`** (`COMPTA_CONTRACT_VERSION` dans
+`compta_payload.py`). Le champ `version` permet l'évolution : un champ inconnu du
+consommateur est ignoré, jamais une erreur. Incrémenter à chaque changement de
+format observable par le consommateur.
+
+```json
+{
+  "version": 1,
+  "fournisseur": "string | null",
+  "date": "YYYY-MM-DD | null",
+  "total_cents": 0,
+  "tps_cents": 0,
+  "tvq_cents": 0,
+  "items": [
+    { "description": "string", "amount_cents": 0, "taxable": true }
+  ],
+  "needs_review": false,
+  "review_reason": "string | null",
+  "source_method": "ocr_text | vision_fallback | vision_primary | unknown"
+}
+```
+
+Règles :
+
+- **Tous les montants en cents entiers** (jamais de float) : `8000` = 80,00 $.
+- **`items[].amount_cents`** sont des montants **avant taxes**.
+- **Cohérence** : `somme(items.amount_cents) + tps_cents + tvq_cents` doit égaler
+  `total_cents`. Sinon `needs_review = true` et `review_reason` explique l'écart.
+  Le producteur n'invente jamais de ligne pour forcer l'équilibre.
+- **`items` peut être `[]`** (reçu global) — alors `needs_review = true` avec raison;
+  le consommateur retombe sur une ligne unique (`total_cents − tps − tvq`).
+
+Le champ doit exister dans Paperless et son id figurer dans `CUSTOM_FIELD_IDS`
+(`config.py`). Le créer une fois, manuellement, via `ensure_compta_field.py`
+(appel réseau réel — jamais exécuté par le loop). Tant que l'id n'est pas inscrit,
+`build_custom_fields` n'écrit simplement pas le contrat.
+
 ## Déploiement (manuel)
 
 Les scripts se déploient à `/opt/paperless/scripts/` et sont déclenchés par le hook

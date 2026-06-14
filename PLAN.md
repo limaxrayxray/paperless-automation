@@ -50,7 +50,7 @@ mocké, jamais d'appel réel Paperless/Claude). Jamais de déploiement automatiq
 - [x] Brancher dans `doc_processor.build_custom_fields` : sérialiser le payload en
       JSON dans le champ `compta_json` (en plus des champs hérités). Tests sur la
       présence et la validité du JSON écrit (via client mocké).
-- [ ] `docs: contrat compta_json` — documenter le format dans README (déjà dans
+- [x] `docs: contrat compta_json` — documenter le format dans README (déjà dans
       SPEC.md) et noter la version du contrat.
 
 ## Phase 3 — Côté consommateur (réalisé dans le repo compta-rapidetech)
