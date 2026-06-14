@@ -1,0 +1,6 @@
+# Dépendances de développement (tests). Les scripts de production n'utilisent que
+# la stdlib. Installer dans un venv :
+#   python -m venv .venv && . .venv/bin/activate   (Windows : .venv\Scripts\activate)
+#   pip install -r requirements-dev.txt
+#   python -m pytest -q
+pytest>=8,<9
