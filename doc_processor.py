@@ -17,17 +17,16 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 
 import claude_analyzer
+import compta_payload
 import paperless_client
-from config import (
-    ALLOWED_TAGS,
-    CUSTOM_FIELD_IDS,
-    DATE_CONFIDENCE_THRESHOLD,
-    DOC_TYPE_IDS,
-    GLOBAL_CONFIDENCE_THRESHOLD,
-    PROTECTED_TAG_IDS,
-    TAG_IDS,
-    YEAR_TAG_IDS,
-)
+from config import ALLOWED_TAGS
+from config import CUSTOM_FIELD_IDS
+from config import DATE_CONFIDENCE_THRESHOLD
+from config import DOC_TYPE_IDS
+from config import GLOBAL_CONFIDENCE_THRESHOLD
+from config import PROTECTED_TAG_IDS
+from config import TAG_IDS
+from config import YEAR_TAG_IDS
 
 # ─── LOGGING ──────────────────────────────────────────────────────────────────
 LOG_FILE = "/opt/paperless/scripts/logs/processor.log"
@@ -121,6 +120,11 @@ def build_custom_fields(
     Construit la mise à jour des custom fields.
     Extrait toujours TPS/TVQ/Total/Facture quand disponibles — Alexandre décide
     du contexte personnel/professionnel lui-même via les tags.
+
+    Sérialise aussi le contrat d'unification `compta_json` (cf. SPEC.md) quand le
+    champ est configuré dans `CUSTOM_FIELD_IDS`. Tant que l'id réel n'y est pas
+    inscrit (création manuelle via `ensure_compta_field.py`), le contrat n'est
+    simplement pas écrit — aucune erreur.
     """
     updates = {}
 
@@ -134,15 +138,23 @@ def build_custom_fields(
         if analysis.get("invoice_number"):
             updates["Facture"] = analysis["invoice_number"]
 
+    # Contrat compta_json — pour tous les types de document, sérialisé en JSON
+    # stable (clés triées → idempotence). Écrit seulement si le champ existe.
+    if "compta_json" in CUSTOM_FIELD_IDS:
+        payload = compta_payload.build_compta_payload(analysis)
+        updates["compta_json"] = json.dumps(
+            payload, ensure_ascii=False, sort_keys=True,
+        )
+
     return paperless_client.build_custom_fields_payload(
-        existing_custom_fields, updates, CUSTOM_FIELD_IDS
+        existing_custom_fields, updates, CUSTOM_FIELD_IDS,
     )
 
 
 def _is_inline_email_image(title: str, content: str) -> bool:
     """Détecte les images inline d'email (ex: image001, image002) — à supprimer."""
     import re
-    return bool(re.match(r'^image\d+$', title.strip(), re.I)) and len(content.strip()) == 0
+    return bool(re.match(r"^image\d+$", title.strip(), re.I)) and len(content.strip()) == 0
 
 
 def process_document(doc_id: int) -> None:
@@ -188,7 +200,7 @@ def process_document(doc_id: int) -> None:
     log.info(
         f"Analyse: type={analysis['doc_type']} context={analysis['context']} "
         f"confidence={analysis['confidence']:.2f} date={analysis.get('date')} "
-        f"correspondent={analysis.get('correspondent')}"
+        f"correspondent={analysis.get('correspondent')}",
     )
     log.info(f"Notes Claude: {analysis.get('notes', '')}")
 
@@ -261,7 +273,7 @@ def process_document(doc_id: int) -> None:
         f"RÉSUMÉ | ID={doc_id} | type={analysis['doc_type']} | "
         f"context={analysis['context']} | confidence={analysis['confidence']:.2f} | "
         f"correspondant={suggested_corr} | date={date_val} | "
-        f"total={analysis.get('total')} | tps={analysis.get('tps')} | tvq={analysis.get('tvq')}"
+        f"total={analysis.get('total')} | tps={analysis.get('tps')} | tvq={analysis.get('tvq')}",
     )
 
 
@@ -271,10 +283,11 @@ RETRY_QUEUE_FILE = "/opt/paperless/scripts/retry_queue.json"
 def _queue_for_retry(doc_id: int) -> None:
     """Ajoute un document à la queue de retry pour quand le rate limit sera levé."""
     import fcntl
-    from datetime import datetime, timezone
+    from datetime import datetime
+    from datetime import timezone
     queue = []
     try:
-        with open(RETRY_QUEUE_FILE, "r") as f:
+        with open(RETRY_QUEUE_FILE) as f:
             fcntl.flock(f, fcntl.LOCK_SH)
             queue = json.load(f)
             fcntl.flock(f, fcntl.LOCK_UN)

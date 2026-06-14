@@ -47,7 +47,7 @@ mocké, jamais d'appel réel Paperless/Claude). Jamais de déploiement automatiq
       (version, fournisseur, date, total/tps/tvq_cents, items[], needs_review,
       review_reason, source_method). Tests : conversion cents, cohérence
       somme(items)+taxes == total, `needs_review` + raison quand écart ou items vides.
-- [ ] Brancher dans `doc_processor.build_custom_fields` : sérialiser le payload en
+- [x] Brancher dans `doc_processor.build_custom_fields` : sérialiser le payload en
       JSON dans le champ `compta_json` (en plus des champs hérités). Tests sur la
       présence et la validité du JSON écrit (via client mocké).
 - [ ] `docs: contrat compta_json` — documenter le format dans README (déjà dans

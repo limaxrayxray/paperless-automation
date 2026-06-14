@@ -288,6 +288,41 @@ repo (modules à la racine). Prochaine : tâche 3 (brancher dans
 
 **Fichiers** : compta_payload.py, tests/test_compta_payload.py, PLAN.md, PROGRESS.md.
 
+## 2026-06-14 — Phase 2 tâche 3 : branchement compta_json dans build_custom_fields
+
+**Tâche** : sérialiser le payload `compta_payload.build_compta_payload` en JSON dans
+le champ `compta_json` depuis `doc_processor.build_custom_fields` (en plus des champs
+hérités), avec tests sur la présence et la validité du JSON écrit.
+
+**Fait** :
+- `doc_processor.build_custom_fields` : si `"compta_json" in CUSTOM_FIELD_IDS`,
+  construit le payload et l'ajoute à `updates` via `json.dumps(payload,
+  ensure_ascii=False, sort_keys=True)`. `sort_keys` garantit une chaîne stable
+  (idempotence) ; `ensure_ascii=False` garde les accents lisibles (`review_reason`).
+  Import du module `compta_payload`.
+- Tolérance d'absence : tant que l'id réel n'est pas inscrit dans `CUSTOM_FIELD_IDS`
+  (création manuelle via `ensure_compta_field.py`), le contrat n'est pas écrit et
+  `build_custom_fields_payload` l'ignore (field_id_map.get → None). Aucun test
+  existant cassé.
+- `tests/test_build_custom_fields_compta.py` — 8 cas : champ non configuré → rien
+  écrit ; champ configuré (monkeypatch.setitem) → JSON valide et conforme (cents,
+  items, fournisseur, date, source_method, version) ; needs_review (incohérence /
+  items vides) ; coexistence avec champs hérités ; écrit même pour type non
+  pertinent ; sérialisation stable ; écrasement d'une valeur existante.
+
+**Décisions** : `compta_json` est écrit **pour tous les types de document** (pas
+seulement les types « pertinents » des champs hérités), conforme à la lettre de
+SPEC.md (« chaque document consommé produit un champ compta_json »). Choix simple
+noté ci-dessous. Gate explicite `if "compta_json" in CUSTOM_FIELD_IDS` plutôt que
+de toujours sérialiser et laisser `build_custom_fields_payload` filtrer — évite le
+travail inutile et rend l'intention claire.
+
+**Vérifications** : `python -m pytest -q` ✅ (136/136). Prochaine : tâche 4
+(`docs: contrat compta_json` — README).
+
+**Fichiers** : doc_processor.py, tests/test_build_custom_fields_compta.py,
+PLAN.md, PROGRESS.md.
+
 ## Décisions à valider
 
 - Contrat d'unification : un seul champ Paperless `compta_json` (texte long, JSON),
@@ -295,3 +330,7 @@ repo (modules à la racine). Prochaine : tâche 3 (brancher dans
   Les champs hérités Total/TPS/TVQ restent pour l'affichage humain.
 - Le loop ne fait aucun appel réseau réel ni déploiement : `ensure_compta_field.py`
   est écrit par le loop mais exécuté manuellement (création du champ via l'API).
+- `compta_json` écrit pour TOUS les types de document (y compris rapport/manuel/
+  personnel/medical), pas seulement les types financiers. Aligné sur SPEC.md mais à
+  confirmer : Alexandre veut-il un contrat compta_json sur les documents non
+  financiers (où il sera surtout `needs_review` avec items vides) ?
