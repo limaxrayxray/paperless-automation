@@ -8,3 +8,6 @@ loop.log
 .pytest_cache/
 # Copie/clone imbriqué accidentel du projet — ne pas versionner
 paperless-automation/
+# État runtime du retry (généré, propre à chaque machine)
+error_retry_state.json
+retry_queue.json

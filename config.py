@@ -38,11 +38,18 @@ LOG_FILE = os.environ.get("LOG_FILE", "/opt/paperless/scripts/logs/processor.log
 # NE JAMAIS assigner, modifier ou retirer ces tags automatiquement
 PROTECTED_TAG_IDS = {
     53,  # rapidetech_checked
+    54,  # Gestion_ALX_Checked
+    68,  # Facture Rapidetech (factures ÉMISES par Rapidetech — jamais auto-assigné)
+}
+
+# ─── TAGS DE TRIGGER ──────────────────────────────────────────────────────────
+# Appliqués automatiquement à la consommation par les workflows scanner pour
+# déclencher le traitement. Retirés après traitement réussi car le pipeline
+# paperless-gpt LXC est désactivé (remplacé par ce script).
+TRIGGER_TAG_IDS = {
     46,  # paperless-gpt-auto
     50,  # paperless-gpt
-    54,  # Gestion_ALX_Checked
     55,  # paperless-gpt-ocr-auto
-    68,  # Facture Rapidetech (factures ÉMISES par Rapidetech — jamais auto-assigné)
 }
 
 # ─── TAGS DE CLASSIFICATION ───────────────────────────────────────────────────
@@ -58,6 +65,7 @@ TAG_IDS = {
     "assurance": 74,
     "autre": 75,
     "a-verifier": 76,
+    "erreur-traitement": 81,
     "dolibarr-queue": 79,
     "dolibarr-sent": 80,
     # Contexte
@@ -124,3 +132,10 @@ DATE_CONFIDENCE_THRESHOLD = 0.85
 GLOBAL_CONFIDENCE_THRESHOLD = 0.65
 # Longueur max du contenu OCR envoyé à Claude (caractères)
 MAX_CONTENT_LENGTH = 6000
+
+# ─── RETRY ERREURS ────────────────────────────────────────────────────────────
+# Tag posé quand l'analyse Claude échoue (CLI code 1, timeout, etc.) — distinct
+# de a-verifier (confiance basse). Retraité chaque nuit par retry_errors.py.
+ERROR_TAG_ID = 81  # erreur-traitement
+# Après ce nombre d'échecs nocturnes, on escalade vers a-verifier (humain).
+ERROR_MAX_ATTEMPTS = 3

@@ -29,6 +29,8 @@ Analyse ce document et retourne UNIQUEMENT un objet JSON valide, sans markdown, 
   "date_confidence": <0.0 à 1.0>,
   "invoice_number": "<numéro facture/transaction ou null>",
   "total": "<montant total avant pourboire, décimal ex: 66.81 ou null>",
+  "currency": "<devise du document: CAD | USD | EUR | etc.>",
+  "supplier_foreign": <true si le fournisseur/émetteur est hors Canada (adresse US, Chine, Europe, etc.), false si canadien>,
   "tps": "<montant TPS — 0.00 si absent/exonéré, null si indéterminable>",
   "tvq": "<montant TVQ — 0.00 si absent/exonéré, null si indéterminable>",
   "line_items": [{"description": "<nom produit/service>", "amount": <montant HT décimal>, "taxable": <true|false>}],
@@ -51,6 +53,8 @@ Règles:
 6. Si document multi-colonnes (ex: 2 reçus côte à côte): analyser les DEUX et prendre les données de la facture principale (avec détail des taxes)
 7. Ne jamais mettre personnel/impots dans tags_to_add
 8. Contexte fiscal Québec: TPS 5%, TVQ 9.975%. Congé fiscal fédéral déc 2024 – fév 2025: TPS=0.00 sur certains articles
+8b. currency: devise du document (CAD par défaut si non précisée).
+8c. supplier_foreign: true si le FOURNISSEUR est hors Canada (adresse US, Chine, Europe, etc.), peu importe la devise de paiement. Un fournisseur étranger (Cloudflare US, AliExpress Chine, DigitalOcean US...) ne perçoit normalement NI TPS NI TVQ même payé en CAD → tps=0.00 et tvq=0.00 est alors NORMAL, pas une erreur. Sauf s'il affiche un numéro TPS/TVQ canadien ET charge une taxe ventilée.
 9. gouvernement UNIQUEMENT pour documents émis par une autorité gouvernementale (Revenu Québec, ARC, SAAQ, municipalité, etc.). Un commerce privé (RONA, Canadian Tire, Amazon, etc.) n'est JAMAIS gouvernement même s'il perçoit des taxes.
 10. Document médical (clinique, hôpital, pharmacie, optométriste, dentiste, etc.): mettre doc_type=medical ET ajouter "medical" dans tags_to_add. Si c'est aussi une facture/reçu, ajouter "facture" ou "recu" en plus.
 11. Personnes: si le document concerne Olivia → ajouter "Olivia" dans tags_to_add. Si Leticia → ajouter "Leticia". Aucun tag pour Alexandre.
@@ -74,6 +78,8 @@ Retourne UNIQUEMENT un objet JSON valide, sans markdown:
   "date_confidence": <0.0 à 1.0>,
   "invoice_number": "<numéro facture ou null>",
   "total": "<montant total décimal ou null>",
+  "currency": "<devise du document: CAD | USD | EUR | etc.>",
+  "supplier_foreign": <true si fournisseur hors Canada (US, Chine, Europe...), false si canadien>,
   "tps": "<montant TPS — 0.00 si absent/exonéré, null si indéterminable>",
   "tvq": "<montant TVQ — 0.00 si absent/exonéré, null si indéterminable>",
   "line_items": [{{"description": "<nom produit/service>", "amount": <montant HT décimal>, "taxable": <true|false>}}],
@@ -91,6 +97,8 @@ Règles:
 - Document médical (clinique, pharmacie, dentiste, etc.): doc_type=medical ET "medical" dans tags_to_add. Si c'est aussi une facture/reçu, ajouter "facture" ou "recu" en plus.
 - Si document concerne Olivia → ajouter "Olivia" dans tags_to_add. Si Leticia → ajouter "Leticia". Aucun tag pour Alexandre.
 - line_items: extraire chaque ligne produit/service avec montant HT et taxable (true/false). Si non identifiable clairement → line_items=[]. Somme des amounts = total-tps-tvq.
+- currency: devise du document (CAD par défaut).
+- supplier_foreign: true si fournisseur hors Canada (adresse US/Chine/Europe...), peu importe la devise. Fournisseur étranger (Cloudflare, AliExpress, DigitalOcean...) → tps=0.00/tvq=0.00 NORMAL même payé en CAD.
 """
 
 
@@ -203,14 +211,36 @@ def _validate_and_clean(data: dict) -> dict:
         if data.get("tvq") is None:
             data["tvq"] = "0.00"
 
-    # Détection incohérence fiscale (scan multi-colonnes raté ou extraction ratée)
+    # Normaliser la devise (CAD par défaut si absente/vide)
+    raw_currency = data.get("currency")
+    currency = str(raw_currency).strip().upper() if raw_currency else "CAD"
+    data["currency"] = currency or "CAD"
+
+    # Normaliser supplier_foreign (bool). Fournisseur étranger = devise non-CAD
+    # OU jugé hors Canada par Claude. C'est le pays du fournisseur qui compte,
+    # pas la devise de paiement (un fournisseur chinois payé en CAD reste étranger).
+    data["supplier_foreign"] = bool(data.get("supplier_foreign"))
+    is_foreign = data["supplier_foreign"] or data["currency"] not in ("CAD", "")
+
+    # Détection incohérence fiscale fiable — deux cas distincts:
+    #  a) Asymétrie TPS>0 mais TVQ=0.00 : impossible au QC (taxes vont de pair)
+    #     → colonne TVQ ratée OU anomalie fournisseur réelle. Toujours suspect.
+    #  b) Fournisseur canadien avec TVQ=0.00 sur >20$ : reçu thermique mal scanné
+    #     (intention d'origine de la règle).
+    # On n'alerte PAS un fournisseur étranger sans taxes — c'est normal.
     total = data.get("total")
+    tps = data.get("tps")
     tvq = data.get("tvq")
     if (data.get("doc_type") in ("recu", "facture") and total is not None
-            and tvq == "0.00" and float(total) > 20.0):
-        data["confidence"] = min(data.get("confidence", 0.5), 0.60)
-        data["notes"] = (data.get("notes", "") +
-                         " [ATTENTION: total présent mais TVQ=0.00 — vérifier]")
+            and float(total) > 20.0 and tvq == "0.00"):
+        asymetrie = tps not in (None, "0.00")
+        canadien_sans_tvq = not is_foreign
+        if asymetrie or canadien_sans_tvq:
+            data["confidence"] = min(data.get("confidence", 0.5), 0.60)
+            raison = ("TPS perçue mais TVQ=0.00" if asymetrie
+                      else "fournisseur canadien sans TVQ")
+            data["notes"] = (data.get("notes", "") +
+                             f" [ATTENTION: {raison} sur {total}$ — vérifier]")
 
     # Valider line_items
     raw_items = data.get("line_items", [])

@@ -1,13 +1,15 @@
 """Chemin d'erreur de `doc_processor.process_document` (client Paperless mocké).
 
 Propriété visée (SPEC §«Chemin d'erreur») : si l'analyse Claude échoue,
-`process_document` retombe proprement — il appose le tag `a-verifier` et ne
+`process_document` retombe proprement — il appose le tag `erreur-traitement`
+(`ERROR_TAG_ID`, distinct de `a-verifier` qui signale une confiance basse) et ne
 laisse remonter AUCUNE exception, pour ne jamais planter le hook post-consume.
+Le document tagué `erreur-traitement` est rejoué chaque nuit par retry_errors.py.
 
 Seule exception : `RateLimitError` doit remonter telle quelle, car l'appelant
 (post_consume / retry_processor) la traite pour mettre le document en queue et
 le rejouer une fois le rate limit levé — il ne faut donc PAS l'avaler ni poser
-`a-verifier` dans ce cas.
+de tag dans ce cas.
 
 L'analyse est remplacée par un stub qui lève (monkeypatch de
 `claude_analyzer.analyze_document_smart`) : aucun appel réel CLI ni vision.
@@ -17,7 +19,7 @@ import pytest
 
 import claude_analyzer
 import doc_processor
-from config import PROTECTED_TAG_IDS, TAG_IDS
+from config import ERROR_TAG_ID, PROTECTED_TAG_IDS, TAG_IDS
 
 
 @pytest.fixture
@@ -30,10 +32,10 @@ def patch_analysis_raises(monkeypatch):
     return _apply
 
 
-# ─── Erreur générique → a-verifier, pas d'exception ─────────────────────────────
+# ─── Erreur générique → erreur-traitement, pas d'exception ──────────────────────
 
-def test_generic_error_adds_a_verifier_no_raise(fake_paperless, patch_analysis_raises):
-    """Une erreur d'analyse quelconque → tag a-verifier, aucune exception remontée."""
+def test_generic_error_adds_error_tag_no_raise(fake_paperless, patch_analysis_raises):
+    """Une erreur d'analyse quelconque → tag erreur-traitement, aucune exception."""
     patch_analysis_raises(RuntimeError("boom OCR"))
     fake_paperless.add_document(1, title="scan_001", content="x" * 500, tags=[])
 
@@ -41,11 +43,11 @@ def test_generic_error_adds_a_verifier_no_raise(fake_paperless, patch_analysis_r
     doc_processor.process_document(1)
 
     tags = fake_paperless.get_document(1)["tags"]
-    assert TAG_IDS["a-verifier"] in tags
+    assert ERROR_TAG_ID in tags
 
 
 def test_generic_error_preserves_existing_tags(fake_paperless, patch_analysis_raises):
-    """a-verifier s'ajoute aux tags existants sans en retirer ni dupliquer."""
+    """erreur-traitement s'ajoute aux tags existants sans en retirer ni dupliquer."""
     patch_analysis_raises(ValueError("JSON illisible"))
     existing = [TAG_IDS["facture"]]
     fake_paperless.add_document(1, title="scan_001", content="abc", tags=existing)
@@ -53,7 +55,7 @@ def test_generic_error_preserves_existing_tags(fake_paperless, patch_analysis_ra
     doc_processor.process_document(1)
 
     tags = fake_paperless.get_document(1)["tags"]
-    assert TAG_IDS["a-verifier"] in tags
+    assert ERROR_TAG_ID in tags
     assert TAG_IDS["facture"] in tags
     assert len(tags) == len(set(tags)), "tags dupliqués"
 
@@ -68,11 +70,11 @@ def test_generic_error_keeps_protected_tags(fake_paperless, patch_analysis_raise
 
     tags = fake_paperless.get_document(1)["tags"]
     assert protected in tags
-    assert TAG_IDS["a-verifier"] in tags
+    assert ERROR_TAG_ID in tags
 
 
 def test_generic_error_does_not_classify(fake_paperless, patch_analysis_raises):
-    """En cas d'erreur, aucun titre/type/champ n'est posé — seul a-verifier change."""
+    """En cas d'erreur, aucun titre/type/champ n'est posé — seul le tag erreur change."""
     patch_analysis_raises(RuntimeError("boom"))
     fake_paperless.add_document(1, title="scan_001", content="abc", tags=[])
 
@@ -83,11 +85,11 @@ def test_generic_error_does_not_classify(fake_paperless, patch_analysis_raises):
     assert doc["document_type"] is None
     assert doc["custom_fields"] == []
     assert doc["correspondent"] is None
-    assert doc["tags"] == [TAG_IDS["a-verifier"]]
+    assert doc["tags"] == [ERROR_TAG_ID]
 
 
 def test_generic_error_is_idempotent(fake_paperless, patch_analysis_raises):
-    """Deux échecs successifs → un seul a-verifier, état stable."""
+    """Deux échecs successifs → un seul tag erreur-traitement, état stable."""
     patch_analysis_raises(RuntimeError("boom"))
     fake_paperless.add_document(1, title="scan_001", content="abc", tags=[])
 
@@ -97,10 +99,10 @@ def test_generic_error_is_idempotent(fake_paperless, patch_analysis_raises):
     after_second = fake_paperless.get_document(1)
 
     assert after_first == after_second
-    assert after_second["tags"].count(TAG_IDS["a-verifier"]) == 1
+    assert after_second["tags"].count(ERROR_TAG_ID) == 1
 
 
-# ─── RateLimitError → remonte (pas d'a-verifier) ────────────────────────────────
+# ─── RateLimitError → remonte (aucun tag posé) ──────────────────────────────────
 
 def test_rate_limit_error_propagates(fake_paperless, patch_analysis_raises):
     """RateLimitError n'est PAS avalée : elle remonte au caller."""
@@ -111,8 +113,8 @@ def test_rate_limit_error_propagates(fake_paperless, patch_analysis_raises):
         doc_processor.process_document(1)
 
 
-def test_rate_limit_error_does_not_tag_a_verifier(fake_paperless, patch_analysis_raises):
-    """Sur rate limit, le document reste intact (pas d'a-verifier) — il sera rejoué."""
+def test_rate_limit_error_does_not_tag(fake_paperless, patch_analysis_raises):
+    """Sur rate limit, le document reste intact (aucun tag) — il sera rejoué."""
     patch_analysis_raises(claude_analyzer.RateLimitError("429"))
     fake_paperless.add_document(1, title="scan_001", content="abc", tags=[])
 
@@ -120,5 +122,6 @@ def test_rate_limit_error_does_not_tag_a_verifier(fake_paperless, patch_analysis
         doc_processor.process_document(1)
 
     tags = fake_paperless.get_document(1)["tags"]
+    assert ERROR_TAG_ID not in tags
     assert TAG_IDS["a-verifier"] not in tags
     assert tags == []
