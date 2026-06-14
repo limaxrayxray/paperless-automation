@@ -254,6 +254,40 @@ tâche 3 (branchement dans `build_custom_fields`) devra donc tolérer son absenc
 **Fichiers** : ensure_compta_field.py, paperless_client.py,
 tests/test_ensure_compta_field.py, PLAN.md, PROGRESS.md.
 
+## 2026-06-14 — Phase 2 tâche 2 : compta_payload.py
+
+**Tâche** : module pur `build_compta_payload(analysis) -> dict` — convertit les
+montants décimaux en cents entiers et assemble le contrat `compta_json` (SPEC.md).
+
+**Fait** :
+- `compta_payload.py` : `_to_cents(value)` (Decimal + ROUND_HALF_UP, jamais de
+  float pour l'argent ; None/illisible → None) et `build_compta_payload`.
+  Montants `total/tps/tvq` et `line_items[].amount` → cents. `tps/tvq` absents → 0.
+  `needs_review` + `review_reason` cumulés si : total manquant, items vides
+  (repli ligne unique requis côté compta), ou incohérence
+  somme(items) + tps + tvq ≠ total. Le producteur n'invente jamais de ligne.
+  Champs du contrat : version, fournisseur, date, *_cents, items[], needs_review,
+  review_reason, source_method (`_method` de l'analyse, défaut « unknown »).
+  `COMPTA_CONTRACT_VERSION = 1`.
+- `tests/test_compta_payload.py` — 19 cas : conversion (chaîne, float, arrondi
+  HALF_UP, None/illisible/""), montants en cents, cohérence équilibrée (1 et
+  plusieurs items), écart/items vides/total manquant → review (+ raisons cumulées),
+  total manquant n'émet pas d'écart, taxes None → 0, assemblage du contrat,
+  fournisseur/date null, source_method défaut, description/taxable normalisés,
+  amount illisible → 0.
+
+**Décisions** : clés d'analyse confirmées contre `claude_analyzer._validate_and_clean`
+(`correspondent`, `date`, `total/tps/tvq`, `line_items[description/amount/taxable]`,
+`_method`). `items` non équilibrés ne sont jamais « corrigés » — on signale via
+`needs_review`, conforme au contrat SPEC. Ruff a reformaté l'ordre des imports
+`decimal` (force-single-line). INP001 (pas d'`__init__.py`) ignoré : convention du
+repo (modules à la racine). Prochaine : tâche 3 (brancher dans
+`build_custom_fields` — tolérer l'absence de `compta_json` dans `CUSTOM_FIELD_IDS`).
+
+**Vérifications** : `python -m pytest -q` ✅ (128/128).
+
+**Fichiers** : compta_payload.py, tests/test_compta_payload.py, PLAN.md, PROGRESS.md.
+
 ## Décisions à valider
 
 - Contrat d'unification : un seul champ Paperless `compta_json` (texte long, JSON),

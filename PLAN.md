@@ -42,7 +42,7 @@ mocké, jamais d'appel réel Paperless/Claude). Jamais de déploiement automatiq
       `compta_json` (type texte long) via l'API Paperless s'il n'existe pas, et
       affiche son id; ajouter l'id à `CUSTOM_FIELD_IDS` dans `config.py`. Script à
       exécuter manuellement une fois (jamais par le loop — appel réseau réel).
-- [ ] Module `compta_payload.py` : `build_compta_payload(analysis) -> dict` pur —
+- [x] Module `compta_payload.py` : `build_compta_payload(analysis) -> dict` pur —
       convertit les montants décimaux en cents entiers, assemble le contrat SPEC
       (version, fournisseur, date, total/tps/tvq_cents, items[], needs_review,
       review_reason, source_method). Tests : conversion cents, cohérence
