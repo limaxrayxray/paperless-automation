@@ -123,6 +123,50 @@ def test_compta_json_ecrit_meme_type_non_pertinent(compta_field):
     assert payload["version"] == COMPTA_CONTRACT_VERSION
 
 
+# ─── Contrat v2 : doc_type, currency, supplier_foreign dans le JSON écrit ────
+
+def test_compta_json_porte_champs_v2(compta_field):
+    # Le payload v2 est sérialisé tel quel : doc_type, currency et
+    # supplier_foreign doivent se retrouver dans le JSON écrit.
+    analysis = {
+        "doc_type": "facture",
+        "total": "100.00",
+        "currency": "USD",
+        "supplier_foreign": True,
+        "line_items": [{"description": "Service", "amount": "100.00"}],
+    }
+    payload = json.loads(_by_id(build_custom_fields([], analysis))[compta_field])
+    assert payload["doc_type"] == "facture"
+    assert payload["currency"] == "USD"
+    assert payload["supplier_foreign"] is True
+
+
+def test_compta_json_v2_defauts(compta_field):
+    # currency absente → « CAD », supplier_foreign absent → False, doc_type relayé.
+    analysis = {"doc_type": "recu", "total": "20.00"}
+    payload = json.loads(_by_id(build_custom_fields([], analysis))[compta_field])
+    assert payload["currency"] == "CAD"
+    assert payload["supplier_foreign"] is False
+    assert payload["doc_type"] == "recu"
+
+
+def test_compta_json_v2_usd_etranger_sans_taxe_coherent(compta_field):
+    # Cas réel de l'audit : fournisseur étranger en USD, sans TPS/TVQ — la devise
+    # ≠ CAD ne doit PAS déclencher needs_review côté producteur.
+    analysis = {
+        "doc_type": "facture",
+        "total": "100.00",
+        "currency": "USD",
+        "supplier_foreign": True,
+        "line_items": [{"description": "SaaS", "amount": "100.00"}],
+    }
+    payload = json.loads(_by_id(build_custom_fields([], analysis))[compta_field])
+    assert payload["currency"] == "USD"
+    assert payload["supplier_foreign"] is True
+    assert payload["needs_review"] is False
+    assert payload["review_reason"] is None
+
+
 # ─── Stabilité / idempotence du JSON sérialisé ───────────────────────────────
 
 def test_compta_json_serialisation_stable(compta_field):

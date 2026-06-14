@@ -3,6 +3,33 @@
 (Le loop écrit ici une entrée datée par tâche. La première ligne devient `DONE`
 quand toutes les tâches hors Phase 3 sont cochées ou BLOQUÉES.)
 
+## 2026-06-14 — Phase 4 tâche 2 : v2 sérialisé tel quel dans compta_json
+
+**Tâche** : vérifier que `doc_processor.build_custom_fields` sérialise le payload v2
+intégralement dans `compta_json` (sort_keys, ensure_ascii=False) — aucun champ v2
+perdu — et compléter les tests pour asserter `doc_type`/`currency`/`supplier_foreign`
+dans le JSON écrit (client mocké).
+
+**Fait** :
+- Vérification : `build_custom_fields` (doc_processor.py:152-156) appelle
+  `compta_payload.build_compta_payload(analysis)` et sérialise le dict **entier** via
+  `json.dumps(payload, ensure_ascii=False, sort_keys=True)`. Comme la sérialisation
+  porte sur le dict complet, les 3 champs v2 ajoutés en tâche 1 voyagent sans
+  modification — aucun code à changer.
+- `tests/test_build_custom_fields_compta.py` — 3 nouveaux cas : `test_compta_json_
+  porte_champs_v2` (doc_type/currency=USD/supplier_foreign=True présents dans le
+  JSON), `test_compta_json_v2_defauts` (currency absente → « CAD », supplier_foreign
+  absent → False, doc_type relayé), `test_compta_json_v2_usd_etranger_sans_taxe_
+  coherent` (cas réel audit : USD étranger sans taxe → pas de needs_review parasite).
+
+**Décisions** : aucune modification de code nécessaire — la tâche était une
+vérification + complétion de tests. Les assertions confirment via le client mocké
+que le seam (doc_processor → compta_json) n'altère pas le contrat v2.
+
+**Vérifications** : `python -m pytest -q` ✅ (162/162).
+
+**Fichiers** : tests/test_build_custom_fields_compta.py, PLAN.md, PROGRESS.md.
+
 ## 2026-06-14 — Phase 4 tâche 1 : compta_payload v2 (doc_type, currency, supplier_foreign)
 
 **Tâche** : passer `COMPTA_CONTRACT_VERSION` à 2 et porter `doc_type`, `currency`

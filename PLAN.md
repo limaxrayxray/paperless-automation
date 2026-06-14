@@ -66,7 +66,7 @@ doit voyager dans le payload. Cf. SPEC.md § contrat (version 2).
       décider) — mais documenter ce choix. Tests : présence des 3 champs, défauts
       (currency manquante → « CAD », supplier_foreign manquant → false), un cas USD
       étranger sans taxe reste cohérent (pas de `needs_review` parasite).
-- [ ] Vérifier `doc_processor.build_custom_fields` : le payload v2 est sérialisé tel
+- [x] Vérifier `doc_processor.build_custom_fields` : le payload v2 est sérialisé tel
       quel dans `compta_json` (sort_keys, ensure_ascii=False) — aucun champ v2 perdu.
       Adapter/compléter les tests existants pour asserter les 3 nouveaux champs dans
       le JSON écrit (client mocké).
