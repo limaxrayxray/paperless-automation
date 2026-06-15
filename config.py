@@ -21,7 +21,28 @@ def _load_dotenv() -> None:
 
 _load_dotenv()
 
-PAPERLESS_URL = os.environ.get("PAPERLESS_URL", "http://localhost:8000/api")
+def _resolve_api_url() -> str:
+    """URL de base de l'API Paperless (doit se terminer par /api).
+
+    ATTENTION collision : `PAPERLESS_URL` est un nom *réservé* par Paperless-ngx
+    (son URL publique, sans /api). Paperless injecte cette variable dans
+    l'environnement du hook post-consume ; si on la lisait directement, le hook
+    taperait sur le frontend (HTML) au lieu de l'API → JSONDecodeError.
+
+    On lit donc en priorité une variable dédiée `PAPERLESS_API_URL`. L'ancienne
+    `PAPERLESS_URL` n'est tolérée (compat) que si elle vise explicitement /api,
+    ce qui écarte d'office la valeur injectée par Paperless.
+    """
+    api_url = os.environ.get("PAPERLESS_API_URL", "").strip()
+    if api_url:
+        return api_url
+    legacy = os.environ.get("PAPERLESS_URL", "").strip()
+    if legacy and legacy.rstrip("/").endswith("/api"):
+        return legacy
+    return "http://localhost:8000/api"
+
+
+PAPERLESS_URL = _resolve_api_url()
 
 # Secret : jamais en dur. Fourni par l'environnement ou un fichier .env (gitignoré).
 PAPERLESS_TOKEN = os.environ.get("PAPERLESS_TOKEN")

@@ -14,7 +14,7 @@ Les secrets vivent dans `.env` (gitignoré). Copier le modèle et remplir :
 
 ```bash
 cp .env.example .env
-# éditer .env : PAPERLESS_TOKEN (obligatoire), PAPERLESS_URL, CLAUDE_BIN
+# éditer .env : PAPERLESS_TOKEN (obligatoire), PAPERLESS_API_URL, CLAUDE_BIN
 ```
 
 ## Tests
