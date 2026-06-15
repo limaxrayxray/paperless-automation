@@ -20,7 +20,7 @@ import pytest
 # Doit s'exécuter avant que tout test n'importe `config` (ou un module qui en
 # dépend). setdefault : ne masque pas une valeur déjà fournie par l'environnement.
 os.environ.setdefault("PAPERLESS_TOKEN", "test-token-bidon")
-os.environ.setdefault("PAPERLESS_URL", "http://paperless.invalid/api")
+os.environ.setdefault("PAPERLESS_API_URL", "http://paperless.invalid/api")
 
 
 @pytest.fixture

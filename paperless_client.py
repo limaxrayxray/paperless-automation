@@ -29,7 +29,17 @@ def _request(
         with urllib.request.urlopen(req) as r:
             if r.status == 204:
                 return {}
-            return json.load(r)
+            raw = r.read()
+            try:
+                return json.loads(raw)
+            except json.JSONDecodeError as e:
+                ctype = r.headers.get("Content-Type", "?")
+                snippet = raw[:200].decode(errors="replace")
+                raise RuntimeError(
+                    f"Réponse non-JSON de {method} {url} "
+                    f"(Content-Type={ctype}). Vérifie PAPERLESS_API_URL "
+                    f"(doit viser /api, pas le frontend). Début du corps: {snippet!r}",
+                ) from e
     except urllib.error.HTTPError as e:
         body = e.read().decode()
         raise RuntimeError(f"HTTP {e.code} {method} {url}: {body}") from e
