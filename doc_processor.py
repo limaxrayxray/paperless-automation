@@ -11,6 +11,7 @@ import json
 import logging
 import os
 import sys
+from datetime import date
 from datetime import datetime
 from pathlib import Path
 
@@ -22,6 +23,8 @@ import paperless_client
 from config import ALLOWED_TAGS
 from config import CUSTOM_FIELD_IDS
 from config import DATE_CONFIDENCE_THRESHOLD
+from config import DATE_REVIEW_MAX_FUTURE_DAYS
+from config import DATE_REVIEW_MAX_PAST_DAYS
 from config import DOC_TYPE_IDS
 from config import ERROR_TAG_ID
 from config import GLOBAL_CONFIDENCE_THRESHOLD
@@ -52,13 +55,56 @@ def get_year_tag_id(year: int) -> int | None:
     return YEAR_TAG_IDS.get(year)
 
 
+def _ingestion_date(doc: dict) -> date:
+    """Date d'ingestion du document (`added`), repli sur aujourd'hui."""
+    raw = doc.get("added") or doc.get("created")
+    if raw:
+        try:
+            return datetime.fromisoformat(str(raw).replace("Z", "+00:00")).date()
+        except ValueError:
+            pass
+    return date.today()
+
+
+def check_date_plausibility(
+    date_val: str | None,
+    ingestion_date: date,
+) -> tuple[bool, str | None]:
+    """Détecte une date extraite incohérente avec la date d'ingestion.
+
+    Un document est normalement scanné peu après son émission. Une date trop
+    antérieure (souvent une confusion d'année : OCR 2026→2025, biais LLM) ou dans
+    le futur est jugée suspecte. Retourne (suspect, raison). Objectif : ne jamais
+    classer en silence dans la mauvaise année fiscale — on flag pour vérification.
+    """
+    if not date_val:
+        return False, None
+    try:
+        d = datetime.strptime(date_val, "%Y-%m-%d").date()
+    except (ValueError, TypeError):
+        return False, None
+    delta = (ingestion_date - d).days
+    if delta > DATE_REVIEW_MAX_PAST_DAYS:
+        return True, (
+            f"date extraite {date_val} = {delta} j avant l'ingestion "
+            f"({ingestion_date}) — probable confusion d'année"
+        )
+    if delta < -DATE_REVIEW_MAX_FUTURE_DAYS:
+        return True, (
+            f"date extraite {date_val} dans le futur vs ingestion ({ingestion_date})"
+        )
+    return False, None
+
+
 def build_tag_updates(
     current_tag_ids: list[int],
     analysis: dict,
+    date_suspect: bool = False,
 ) -> list[int]:
     """
     Calcule la liste finale des tags en appliquant les résultats de l'analyse.
-    Ne touche jamais aux tags protégés.
+    Ne touche jamais aux tags protégés. Si `date_suspect`, le tag année est ignoré
+    et a-verifier est forcé (date probablement dans la mauvaise année).
     """
     tags = set(current_tag_ids)
 
@@ -86,10 +132,10 @@ def build_tag_updates(
     if TAG_IDS["medical"] in tags:
         tags.add(personnel_id)
 
-    # Tag année (seulement si confiance suffisante)
+    # Tag année (seulement si confiance suffisante ET date non suspecte)
     date_str = analysis.get("date")
     date_conf = analysis.get("date_confidence", 0.0)
-    if date_str and date_conf >= DATE_CONFIDENCE_THRESHOLD:
+    if not date_suspect and date_str and date_conf >= DATE_CONFIDENCE_THRESHOLD:
         try:
             year = int(date_str[:4])
             year_tag = get_year_tag_id(year)
@@ -100,8 +146,9 @@ def build_tag_updates(
         except (ValueError, IndexError):
             pass
 
-    # Tag a-verifier si confiance basse
-    if analysis.get("confidence", 0) < GLOBAL_CONFIDENCE_THRESHOLD:
+    # Tag a-verifier si confiance basse OU date suspecte
+    low_conf = analysis.get("confidence", 0) < GLOBAL_CONFIDENCE_THRESHOLD
+    if low_conf or date_suspect:
         tags.add(TAG_IDS["a-verifier"])
     else:
         tags.discard(TAG_IDS["a-verifier"])
@@ -213,11 +260,24 @@ def process_document(doc_id: int) -> None:
     )
     log.info(f"Notes Claude: {analysis.get('notes', '')}")
 
+    # Garde-fou date : la date extraite est-elle cohérente avec l'ingestion ?
+    ingestion_date = _ingestion_date(doc)
+    date_suspect, date_reason = check_date_plausibility(
+        analysis.get("date"), ingestion_date,
+    )
+    if date_suspect:
+        log.warning(
+            f"DATE SUSPECTE doc {doc_id}: {date_reason} → a-verifier, "
+            f"tag année ignoré, date NON écrasée",
+        )
+        analysis["notes"] = (analysis.get("notes", "") or "") + \
+            f" [DATE SUSPECTE: {date_reason}]"
+
     # 3. Construire le payload de mise à jour
     payload: dict = {}
 
     # Tags
-    new_tags = build_tag_updates(current_tags, analysis)
+    new_tags = build_tag_updates(current_tags, analysis, date_suspect=date_suspect)
     if set(new_tags) != set(current_tags):
         payload["tags"] = new_tags
         log.info(f"Tags: {current_tags} → {new_tags}")
@@ -228,10 +288,12 @@ def process_document(doc_id: int) -> None:
         payload["title"] = suggested_title
         log.info(f"Titre: '{title}' → '{suggested_title}'")
 
-    # Date du document
+    # Date du document — jamais écrasée si jugée suspecte (mauvaise année probable) :
+    # on laisse Paperless garder sa date d'ingestion (bonne année) plutôt que de
+    # classer en silence dans la mauvaise. Le tag a-verifier signale la correction.
     date_val = analysis.get("date")
     date_conf = analysis.get("date_confidence", 0.0)
-    if date_val and date_conf >= DATE_CONFIDENCE_THRESHOLD:
+    if date_val and date_conf >= DATE_CONFIDENCE_THRESHOLD and not date_suspect:
         try:
             parsed_date = datetime.strptime(date_val, "%Y-%m-%d")
             payload["created"] = parsed_date.strftime("%Y-%m-%dT00:00:00Z")
@@ -263,7 +325,7 @@ def process_document(doc_id: int) -> None:
                 payload["correspondent"] = corr_id
                 log.info(
                     f"Correspondant: '{suggested_corr}' (ID={corr_id})"
-                    + (f" [écrase ancien ID={current_correspondent}]" if current_correspondent else "")
+                    + (f" [écrase ancien ID={current_correspondent}]" if current_correspondent else ""),
                 )
         except Exception as e:
             log.warning(f"Erreur correspondant: {e}")

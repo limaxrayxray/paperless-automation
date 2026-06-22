@@ -70,7 +70,8 @@ def test_compta_json_ecrit_quand_champ_configure(compta_field):
     assert payload["tps_cents"] == 500
     assert payload["tvq_cents"] == 998
     assert payload["items"] == [
-        {"description": "Service", "amount_cents": 10000, "taxable": True},
+        {"description": "Service", "amount_cents": 10000, "taxable": True,
+         "sku": "Service", "qty": 1, "unit_price_cents": 10000},
     ]
     assert payload["fournisseur"] == "Fournisseur X"
     assert payload["date"] == "2026-01-15"

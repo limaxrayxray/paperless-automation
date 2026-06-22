@@ -21,7 +21,9 @@ sys.path.insert(0, str(Path(__file__).parent))
 import claude_analyzer
 import doc_processor
 import paperless_client
-from config import ERROR_MAX_ATTEMPTS, ERROR_TAG_ID, TAG_IDS
+from config import ERROR_MAX_ATTEMPTS
+from config import ERROR_TAG_ID
+from config import TAG_IDS
 
 STATE_FILE = "/opt/paperless/scripts/error_retry_state.json"
 LOG_FILE = "/opt/paperless/scripts/logs/processor.log"
@@ -39,7 +41,7 @@ log = logging.getLogger(__name__)
 
 def load_state() -> dict:
     try:
-        with open(STATE_FILE, "r") as f:
+        with open(STATE_FILE) as f:
             fcntl.flock(f, fcntl.LOCK_SH)
             data = json.load(f)
             fcntl.flock(f, fcntl.LOCK_UN)
@@ -69,7 +71,7 @@ def escalate(doc_id: int) -> None:
         tags.add(TAG_IDS["a-verifier"])
         paperless_client.patch_document(doc_id, {"tags": sorted(tags)})
         log.warning(
-            f"Doc {doc_id}: {ERROR_MAX_ATTEMPTS} échecs — escalade vers a-verifier"
+            f"Doc {doc_id}: {ERROR_MAX_ATTEMPTS} échecs — escalade vers a-verifier",
         )
     except Exception as e:
         log.error(f"Doc {doc_id}: échec escalade a-verifier: {e}")
@@ -77,12 +79,20 @@ def escalate(doc_id: int) -> None:
 
 def main():
     doc_ids = find_error_docs()
+    state = load_state()
+
+    # Purge des entrées obsolètes : docs qui n'ont plus le tag erreur (résolus
+    # ailleurs, ex. retraitement manuel) — évite l'accumulation dans l'état.
+    for stale_id in set(state) - set(doc_ids):
+        state.pop(stale_id, None)
+        log.info(f"Doc {stale_id}: entrée d'état obsolète purgée (plus en erreur)")
+
     if not doc_ids:
+        save_state(state)
         log.info("Aucun document en erreur — rien à retenter")
         return
 
     log.info(f"Retry erreurs: {len(doc_ids)} document(s) à retenter")
-    state = load_state()
     rate_limited = False
 
     for doc_id in doc_ids:

@@ -27,27 +27,36 @@ Racine : `total_cents`, `tps_cents`, `tvq_cents`, `currency`, `fournisseur`,
   "description": "string",
   "amount_cents": 1234,          // entier, cents, AVANT taxes (inchangé)
   "taxable": true,
-  "upc": "0651510...",           // NOUVEAU — string|null
+  "sku": "B07XYZ1234",           // NOUVEAU — string|null (code produit fournisseur)
   "qty": 2,                      // NOUVEAU — ENTIER > 0, défaut 1
   "unit_price_cents": 617        // NOUVEAU — entier > 0, cents, avant taxes
 }
 ```
 
+> **Note (révision)** : le champ produit n'est PAS verrouillé sur l'UPC. Tous les
+> fournisseurs n'en mettent pas (Amazon = ASIN, Canadian Tire = n° d'article,
+> DigitalOcean = sa propre réf.). Le champ s'appelle donc `sku` et accepte **tout
+> code affiché**. L'UPC reste un simple garde-fou : un code en 12 chiffres purs est
+> validé par checksum ; les autres formats passent tels quels. Objectif réel :
+> sauvegarder les items pour ne pas les ressaisir, pas normaliser un format.
+
 ### Règles (à respecter pour ne rien casser en aval)
 
 1. **Additif et non destructif.** Les 3 champs s'ajoutent ; ils ne doivent JAMAIS
-   dégrader l'extraction existante. Un document sans UPC/qté doit toujours produire un
-   `compta_json` valide (`upc:null`, `qty:1`, `unit_price_cents = amount_cents`).
+   dégrader l'extraction existante. Un document sans sku/qté doit toujours produire un
+   `compta_json` valide (`sku:null`, `qty:1`, `unit_price_cents = amount_cents`).
 
 2. **Invariant** : `amount_cents == qty * unit_price_cents` (arrondi au cent). Si tu
    n'as que le montant de ligne → `qty=1`, `unit_price_cents=amount_cents`.
 
 3. **Qté = ENTIER** (décidé côté compta, pas de décimale). Pas de qté claire → `qty=1`.
 
-4. **UPC : jamais deviner.** Valide le **check digit UPC-A** (12ᵉ chiffre, checksum
-   mod-10) avant d'émettre. Checksum KO ou lecture incomplète → `upc: null`. Mieux
-   vaut « UPC absent » qu'« UPC faux » : l'aval s'en remet alors au match
-   fournisseur+description, qui couvre déjà le cas dominant (ex. Maxi = bouteille d'eau).
+4. **SKU : jamais deviner, format libre.** On émet le code produit tel qu'affiché
+   (UPC, ASIN, n° d'article…). Garde-fou : un code en 12 chiffres purs est traité
+   comme un UPC-A et son **check digit** (mod-10) validé ; checksum KO → repli
+   (anti-erreur OCR). Les autres formats passent tels quels. **Sans code lisible**
+   (ex. facture Claude « Claude Pro »), `sku` reprend la **description**
+   (`sku == description`) ; `null` seulement si ni code ni description.
 
 5. **Taxes & montants inchangés** : ne jamais recalculer `tps_cents`/`tvq_cents` par
    taux, toujours les reprendre tels quels. `amount_cents` et `unit_price_cents` restent
@@ -55,9 +64,18 @@ Racine : `total_cents`, `tps_cents`, `tvq_cents`, `currency`, `fournisseur`,
 
 ## Travail attendu
 
-- [ ] Extraire UPC / qté / prix unitaire par ligne (en plus du montant déjà extrait).
-- [ ] Implémenter la validation du **check digit UPC-A** → `null` si invalide.
-- [ ] Garantir l'invariant `amount_cents == qty × unit_price_cents` (avec repli).
-- [ ] Sérialiser les 3 champs dans `compta_json.items[]`.
-- [ ] Tester sur le **reçu Maxi** (UPC par ligne, peu visible) + une facture classique.
-- [ ] Vérifier la rétro-compatibilité (document sans UPC/qté → JSON toujours valide).
+- [x] Extraire sku / qté / prix unitaire par ligne (en plus du montant déjà extrait).
+      → prompts vision + texte (`claude_analyzer.py`, line_items v3).
+- [x] Implémenter la validation du **check digit UPC-A** (garde-fou) → `null` si KO ;
+      formats non-UPC conservés. → `compta_payload._valid_upc` / `_clean_sku`.
+- [x] Garantir l'invariant `amount_cents == qty × unit_price_cents` (qté préservée,
+      prix unitaire arrondi au cent). → `compta_payload._line_qty_and_unit`.
+- [x] Sérialiser les 3 champs dans `compta_json.items[]`.
+      → `build_compta_payload` (version du contrat → 3).
+- [x] **SAQ / prix taxes-incluses** : dé-taxe des lignes au prorata (flag
+      `line_amounts_include_tax`, consigne `taxable:false` intacte).
+      → `compta_payload._detax_lines`. Validé end-to-end sur le reçu 976.
+- [x] Tester (couverture unitaire dans `tests/test_compta_payload.py` : checksum
+      valide/invalide, sku ASIN/Canadian Tire, qty, repli, rétro-compat, dé-taxe SAQ).
+- [x] Vérifier la rétro-compatibilité (document sans sku/qté → `sku:null`, `qty:1`,
+      `unit_price_cents == amount_cents`).

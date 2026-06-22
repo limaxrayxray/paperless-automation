@@ -8,12 +8,32 @@ import re
 import subprocess
 import sys
 import tempfile
+from datetime import date
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from config import ALLOWED_TAGS, CLAUDE_BIN, MAX_CONTENT_LENGTH
+from config import ALLOWED_TAGS
+from config import CLAUDE_BIN
+from config import MAX_CONTENT_LENGTH
 
 MEDIA_ROOT = "/opt/paperless/media/documents/originals"
+
+
+def _date_context() -> str:
+    """Contexte temporel injecté en tête de prompt — évite la confusion d'année.
+
+    Sans la date du jour, Claude tend à rabattre les années vers son « présent »
+    d'entraînement, et l'OCR thermique lit parfois 2026 comme 2025. On ancre donc
+    le modèle sur aujourd'hui et on rappelle le format AA/MM/JJ des terminaux.
+    """
+    return (
+        f"CONTEXTE TEMPOREL — Date du jour : {date.today().isoformat()}.\n"
+        "Ne suppose JAMAIS l'année : lis-la sur le document. Les reçus et terminaux "
+        "de paiement impriment souvent la date en AA/MM/JJ (ex. 26/06/05 = "
+        "2026-06-05, PAS 2025). Un document est normalement scanné peu après son "
+        "émission : une date nettement antérieure à aujourd'hui est suspecte "
+        "(probable confusion d'année) — dans le doute, baisse date_confidence.\n\n"
+    )
 
 PROMPT_VISION = """\
 Tu es un système expert d'extraction de données de documents financiers (Québec, Canada).
@@ -33,7 +53,8 @@ Analyse ce document et retourne UNIQUEMENT un objet JSON valide, sans markdown, 
   "supplier_foreign": <true si le fournisseur/émetteur est hors Canada (adresse US, Chine, Europe, etc.), false si canadien>,
   "tps": "<montant TPS — 0.00 si absent/exonéré, null si indéterminable>",
   "tvq": "<montant TVQ — 0.00 si absent/exonéré, null si indéterminable>",
-  "line_items": [{"description": "<nom produit/service>", "amount": <montant HT décimal>, "taxable": <true|false>}],
+  "line_amounts_include_tax": <true si les prix par ligne incluent déjà les taxes (ex: SAQ), false sinon>,
+  "line_items": [{"description": "<nom produit/service>", "amount": <montant ligne décimal>, "taxable": <true|false>, "sku": "<code produit du fournisseur tel qu'affiché, ou null>", "qty": <quantité entière, défaut 1>, "unit_price": <prix unitaire décimal>}],
   "tags_to_add": ["<tag1>"],
   "confidence": <0.0 à 1.0>,
   "notes": "<observations importantes>"
@@ -58,7 +79,15 @@ Règles:
 9. gouvernement UNIQUEMENT pour documents émis par une autorité gouvernementale (Revenu Québec, ARC, SAAQ, municipalité, etc.). Un commerce privé (RONA, Canadian Tire, Amazon, etc.) n'est JAMAIS gouvernement même s'il perçoit des taxes.
 10. Document médical (clinique, hôpital, pharmacie, optométriste, dentiste, etc.): mettre doc_type=medical ET ajouter "medical" dans tags_to_add. Si c'est aussi une facture/reçu, ajouter "facture" ou "recu" en plus.
 11. Personnes: si le document concerne Olivia → ajouter "Olivia" dans tags_to_add. Si Leticia → ajouter "Leticia". Aucun tag pour Alexandre.
-12. line_items: extraire CHAQUE ligne de produit/service avec son montant HT et si elle est taxable (TPS+TVQ). Si les lignes ne sont pas clairement identifiables (reçu global, montant unique), mettre line_items=[]. Les montants line_items sont AVANT taxes. La somme des amounts doit égaler total-tps-tvq.
+12. line_items: extraire CHAQUE ligne de produit/service avec son montant et si elle est taxable (TPS+TVQ). Si les lignes ne sont pas clairement identifiables (reçu global, montant unique), mettre line_items=[]. Normalement les montants line_items sont AVANT taxes et leur somme égale total-tps-tvq.
+13. Par ligne (en plus de amount/taxable):
+    - sku: le code produit du fournisseur tel qu'AFFICHÉ sur le document, quel qu'en soit le format (UPC/code-barres, ASIN Amazon, n° d'article Canadian Tire, référence DigitalOcean, etc.), sinon null. NE JAMAIS deviner ni compléter un code partiel — mieux vaut null qu'un code faux. But: pouvoir ré-identifier le même item d'un achat à l'autre.
+    - qty: la quantité, ENTIER >= 1 (défaut 1 si non indiquée). Pas de décimale.
+    - unit_price: le prix unitaire affiché (décimal). Doit respecter amount = qty x unit_price. Si seul le montant de ligne est visible → qty=1 et unit_price=amount.
+14. line_amounts_include_tax: mettre true UNIQUEMENT si les prix par ligne incluent DÉJÀ les taxes (TPS+TVQ), typique des reçus SAQ. Dans ce cas:
+    - reporter les prix AFFICHÉS tels quels dans amount/unit_price (le système les ramènera en HT à partir des totaux TPS/TVQ — ne PAS les convertir toi-même);
+    - la consigne/dépôt est une ligne DISTINCTE avec taxable=false (elle n'est pas taxée).
+    Sinon false (cas par défaut: prix déjà HT, taxes ventilées à part).
 """
 
 PROMPT_TEXT = """\
@@ -82,7 +111,8 @@ Retourne UNIQUEMENT un objet JSON valide, sans markdown:
   "supplier_foreign": <true si fournisseur hors Canada (US, Chine, Europe...), false si canadien>,
   "tps": "<montant TPS — 0.00 si absent/exonéré, null si indéterminable>",
   "tvq": "<montant TVQ — 0.00 si absent/exonéré, null si indéterminable>",
-  "line_items": [{{"description": "<nom produit/service>", "amount": <montant HT décimal>, "taxable": <true|false>}}],
+  "line_amounts_include_tax": <true si les prix par ligne incluent déjà les taxes (ex: SAQ), false sinon>,
+  "line_items": [{{"description": "<nom produit/service>", "amount": <montant ligne décimal>, "taxable": <true|false>, "sku": "<code produit du fournisseur tel qu'affiché, ou null>", "qty": <quantité entière, défaut 1>, "unit_price": <prix unitaire décimal>}}],
   "tags_to_add": ["<tag1>"],
   "confidence": <0.0 à 1.0>,
   "notes": "<observations>"
@@ -96,7 +126,9 @@ Règles:
 - gouvernement UNIQUEMENT pour documents d'autorités gouvernementales (Revenu Québec, ARC, SAAQ, etc.) — jamais pour un commerce privé.
 - Document médical (clinique, pharmacie, dentiste, etc.): doc_type=medical ET "medical" dans tags_to_add. Si c'est aussi une facture/reçu, ajouter "facture" ou "recu" en plus.
 - Si document concerne Olivia → ajouter "Olivia" dans tags_to_add. Si Leticia → ajouter "Leticia". Aucun tag pour Alexandre.
-- line_items: extraire chaque ligne produit/service avec montant HT et taxable (true/false). Si non identifiable clairement → line_items=[]. Somme des amounts = total-tps-tvq.
+- line_items: extraire chaque ligne produit/service avec montant et taxable (true/false). Si non identifiable clairement → line_items=[]. Normalement amounts en HT, somme = total-tps-tvq.
+- Par ligne aussi: sku (code produit du fournisseur tel qu'affiché — UPC, ASIN Amazon, n° d'article Canadian Tire, etc. — sinon null, ne jamais deviner), qty (entier >= 1, défaut 1), unit_price (prix unitaire affiché, amount = qty x unit_price; si seul amount visible → qty=1, unit_price=amount).
+- line_amounts_include_tax: true UNIQUEMENT si les prix par ligne incluent déjà les taxes (ex: SAQ) → reporter les prix affichés tels quels (le système les ramènera en HT), et mettre la consigne/dépôt en ligne distincte taxable=false. Sinon false.
 - currency: devise du document (CAD par défaut).
 - supplier_foreign: true si fournisseur hors Canada (adresse US/Chine/Europe...), peu importe la devise. Fournisseur étranger (Cloudflare, AliExpress, DigitalOcean...) → tps=0.00/tvq=0.00 NORMAL même payé en CAD.
 """
@@ -104,7 +136,15 @@ Règles:
 
 class RateLimitError(Exception):
     """Levée quand Claude retourne une erreur de limite de taux."""
-    pass
+
+
+# Motifs (sur stderr OU stdout) trahissant une limite/surcharge temporaire : il
+# faut alors mettre en file de retry (RateLimitError), PAS taguer erreur-traitement.
+_RATELIMIT_PATTERNS = (
+    "429", "too many requests", "overloaded", "rate limit", "rate_limit",
+    "usage limit", "usage_limit", "reached your", "resets at", "try again later",
+    "service unavailable", "503", "529",
+)
 
 
 def _call_claude(input_json: dict) -> str:
@@ -124,10 +164,14 @@ def _call_claude(input_json: dict) -> str:
     )
 
     if result.returncode != 0:
-        stderr = result.stderr.lower()
-        if any(kw in stderr for kw in ("429", "too many requests", "overloaded")):
-            raise RateLimitError(f"Claude rate limit atteint: {result.stderr[:200]}")
-        raise RuntimeError(f"Claude CLI erreur (code {result.returncode}): {result.stderr[:300]}")
+        # Le CLI écrit souvent son motif d'erreur sur stdout (résultat stream-json),
+        # pas sur stderr : on inspecte les deux pour ne pas perdre la cause.
+        combined = (result.stderr + " " + result.stdout).lower()
+        if any(kw in combined for kw in _RATELIMIT_PATTERNS):
+            detail = (result.stderr.strip() or result.stdout.strip())[:300]
+            raise RateLimitError(f"Claude limite/surcharge: {detail}")
+        detail = result.stderr.strip() or result.stdout.strip()[:500] or "(aucune sortie)"
+        raise RuntimeError(f"Claude CLI erreur (code {result.returncode}): {detail}")
 
     for line in result.stdout.strip().split("\n"):
         try:
@@ -222,6 +266,10 @@ def _validate_and_clean(data: dict) -> dict:
     data["supplier_foreign"] = bool(data.get("supplier_foreign"))
     is_foreign = data["supplier_foreign"] or data["currency"] not in ("CAD", "")
 
+    # Source à prix taxes-incluses (SAQ…) : la dé-taxe des lignes est faite par
+    # compta_payload à partir des totaux TPS/TVQ. Ici on normalise juste le drapeau.
+    data["line_amounts_include_tax"] = bool(data.get("line_amounts_include_tax"))
+
     # Détection incohérence fiscale fiable — deux cas distincts:
     #  a) Asymétrie TPS>0 mais TVQ=0.00 : impossible au QC (taxes vont de pair)
     #     → colonne TVQ ratée OU anomalie fournisseur réelle. Toujours suspect.
@@ -250,10 +298,19 @@ def _validate_and_clean(data: dict) -> dict:
             if not isinstance(item, dict):
                 continue
             try:
+                # sku/qty/unit_price : passés tels quels ; la validation (garde-fou
+                # checksum UPC, invariant amount==qty*unit_price, dé-taxe) est faite
+                # par compta_payload.build_compta_payload. Ici on normalise "null".
+                raw_sku = item.get("sku")
+                sku = (str(raw_sku).strip()
+                       if raw_sku not in (None, "", "null", "None") else None)
                 clean_items.append({
                     "description": str(item.get("description", "")).strip(),
                     "amount":      round(float(item.get("amount", 0)), 2),
                     "taxable":     bool(item.get("taxable", True)),
+                    "sku":         sku,
+                    "qty":         item.get("qty", 1),
+                    "unit_price":  item.get("unit_price"),
                 })
             except (ValueError, TypeError):
                 continue
@@ -327,13 +384,13 @@ def analyze_document_vision(doc_id: int) -> dict:
                 img_b64 = base64.b64encode(f.read()).decode()
             content_parts.append({
                 "type": "image",
-                "source": {"type": "base64", "media_type": "image/png", "data": img_b64}
+                "source": {"type": "base64", "media_type": "image/png", "data": img_b64},
             })
-        content_parts.append({"type": "text", "text": PROMPT_VISION})
+        content_parts.append({"type": "text", "text": _date_context() + PROMPT_VISION})
 
     message = {
         "type": "user",
-        "message": {"role": "user", "content": content_parts}
+        "message": {"role": "user", "content": content_parts},
     }
     text = _call_claude(message)
     return _validate_and_clean(_extract_json(text))
@@ -346,11 +403,13 @@ def analyze_document(title: str, content: str) -> dict:
         content = content[:half] + "\n[...tronqué...]\n" + content[-half:]
 
     allowed_str = ", ".join(sorted(ALLOWED_TAGS))
-    prompt = PROMPT_TEXT.format(title=title, content=content or "(aucun contenu OCR)", allowed_tags=allowed_str)
+    prompt = _date_context() + PROMPT_TEXT.format(
+        title=title, content=content or "(aucun contenu OCR)", allowed_tags=allowed_str,
+    )
 
     message = {
         "type": "user",
-        "message": {"role": "user", "content": [{"type": "text", "text": prompt}]}
+        "message": {"role": "user", "content": [{"type": "text", "text": prompt}]},
     }
     text = _call_claude(message)
     return _validate_and_clean(_extract_json(text))

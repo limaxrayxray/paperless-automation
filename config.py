@@ -49,7 +49,7 @@ PAPERLESS_TOKEN = os.environ.get("PAPERLESS_TOKEN")
 if not PAPERLESS_TOKEN:
     raise RuntimeError(
         "PAPERLESS_TOKEN manquant : définissez-le dans l'environnement ou dans un "
-        "fichier .env à côté de config.py (voir .env.example). Jamais de secret en dur."
+        "fichier .env à côté de config.py (voir .env.example). Jamais de secret en dur.",
     )
 
 CLAUDE_BIN = os.environ.get("CLAUDE_BIN", "/root/.local/bin/claude")
@@ -152,6 +152,14 @@ DOC_TYPE_IDS = {
 DATE_CONFIDENCE_THRESHOLD = 0.85
 # Confiance minimale globale; en dessous → tag a-verifier
 GLOBAL_CONFIDENCE_THRESHOLD = 0.65
+
+# Garde-fou date : un document est normalement scanné peu après son émission.
+# Une date extraite plus de N jours AVANT l'ingestion (ou dans le futur) trahit
+# souvent une confusion d'année (OCR thermique 2026→2025, biais LLM sur l'année
+# courante). Dans ce cas → tag a-verifier, PAS de tag année, date non écrasée :
+# on refuse de classer en silence dans la mauvaise année fiscale.
+DATE_REVIEW_MAX_PAST_DAYS = 45
+DATE_REVIEW_MAX_FUTURE_DAYS = 2
 # Longueur max du contenu OCR envoyé à Claude (caractères)
 MAX_CONTENT_LENGTH = 6000
 

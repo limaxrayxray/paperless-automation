@@ -83,8 +83,11 @@ def test_tags_have_no_duplicates_and_keep_protected(fake_paperless, patch_analys
     """Aucun doublon de tag et le tag protégé présent est conservé."""
     patch_analysis(_stub_analysis())
     protected = next(iter(PROTECTED_TAG_IDS))
+    # `added` proche de la date extraite → date plausible (pas de flag suspect),
+    # le tag année peut donc être appliqué.
     fake_paperless.add_document(
-        1, title="scan_001", content="x" * 500, tags=[protected]
+        1, title="scan_001", content="x" * 500, tags=[protected],
+        added="2026-03-15T12:00:00Z",
     )
 
     _run_twice(fake_paperless, 1)

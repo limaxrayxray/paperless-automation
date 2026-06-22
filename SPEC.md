@@ -42,7 +42,7 @@ Le seam entre `paperless-automation` (producteur) et `compta-rapidetech`
 
 ```json
 {
-  "version": 2,
+  "version": 3,
   "doc_type": "facture | recu | releve | contrat | assurance | rapport | certificat | gouvernement | medical | impots | autre",
   "fournisseur": "string | null",
   "supplier_foreign": false,
@@ -52,7 +52,8 @@ Le seam entre `paperless-automation` (producteur) et `compta-rapidetech`
   "tps_cents": 0,
   "tvq_cents": 0,
   "items": [
-    { "description": "string", "amount_cents": 0, "taxable": true }
+    { "description": "string", "amount_cents": 0, "taxable": true,
+      "sku": "string | null", "qty": 1, "unit_price_cents": 0 }
   ],
   "needs_review": false,
   "review_reason": "string | null",
@@ -64,6 +65,22 @@ Règles du contrat :
 
 - **Tous les montants en cents entiers.** `8000` = 80,00 $.
 - **`items[].amount_cents`** sont des montants **avant taxes**.
+- **v3 — `items[].sku` / `qty` / `unit_price_cents`** (additifs, non destructifs) :
+  `sku` = code produit du fournisseur tel qu'affiché (UPC, ASIN Amazon, n° d'article
+  Canadian Tire, réf. DigitalOcean…) — **jamais deviné**. But : pouvoir ré-identifier
+  un item d'un achat à l'autre, sans imposer de format. Garde-fou qualité : un code en
+  12 chiffres purs est traité comme un UPC-A et son check digit validé (checksum KO →
+  repli, anti-erreur OCR) ; tout autre format passe tel quel. **Repli sans code** : si
+  aucun code produit n'est lisible (ex. facture Claude « Claude Pro »), `sku` reprend
+  la **description** (`sku == description`) ; `null` seulement si ni code ni description.
+  `qty` = entier >= 1 (défaut 1) ; `unit_price_cents` en cents avant taxes. Invariant :
+  `amount_cents == qty × unit_price_cents` (au cent près). Sans qté → `qty=1`,
+  `unit_price_cents = amount_cents`.
+- **Sources à prix taxes-incluses (SAQ)** : quand l'analyse pose
+  `line_amounts_include_tax`, les lignes taxables (prix TTC affichés) sont ramenées
+  en HT au prorata, à partir des totaux TPS/TVQ du document ; la consigne
+  (`taxable:false`) est laissée intacte. `items[].amount_cents` est donc toujours HT,
+  et la cohérence `somme(items) + tps + tvq == total` reste vérifiée.
 - **`currency`** : code de devise du document (« CAD » par défaut). Les montants
   restent **dans cette devise, sans conversion** — c'est au consommateur de décider
   quoi faire d'une devise ≠ CAD (ex. brouillon `needs_review`, conversion manuelle).

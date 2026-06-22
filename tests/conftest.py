@@ -73,6 +73,7 @@ class FakePaperless:
             "correspondent": fields.get("correspondent"),
             "document_type": fields.get("document_type"),
             "created": fields.get("created"),
+            "added": fields.get("added"),
         }
         self.docs[doc_id] = doc
         return doc

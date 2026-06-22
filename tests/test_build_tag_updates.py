@@ -12,6 +12,8 @@ Note : `confidence` est fourni explicitement (>= seuil) quand le test ne porte
 pas sur `a-verifier`, car son absence (défaut 0) déclencherait le tag.
 """
 
+from datetime import date
+
 from config import (
     DATE_CONFIDENCE_THRESHOLD,
     GLOBAL_CONFIDENCE_THRESHOLD,
@@ -20,6 +22,7 @@ from config import (
     YEAR_TAG_IDS,
 )
 from doc_processor import build_tag_updates
+from doc_processor import check_date_plausibility
 
 HIGH = 0.95  # confiance globale au-dessus du seuil (pas de a-verifier)
 
@@ -201,6 +204,64 @@ def test_a_verifier_borne_seuil_exclu():
         current, {"doc_type": "facture", "confidence": GLOBAL_CONFIDENCE_THRESHOLD}
     )
     assert TAG_IDS["a-verifier"] not in result
+
+
+# ─── Garde-fou date : check_date_plausibility ────────────────────────────────
+
+def test_date_plausible_recente():
+    suspect, reason = check_date_plausibility("2026-06-15", date(2026, 6, 19))
+    assert suspect is False
+    assert reason is None
+
+
+def test_date_suspecte_confusion_annee():
+    # Cas réel doc 981 : extraite 2025-06-05, ingérée 2026-06-19 (~1 an avant).
+    suspect, reason = check_date_plausibility("2025-06-05", date(2026, 6, 19))
+    assert suspect is True
+    assert "confusion d'année" in reason
+
+
+def test_date_suspecte_dans_le_futur():
+    suspect, reason = check_date_plausibility("2026-12-01", date(2026, 6, 19))
+    assert suspect is True
+    assert "futur" in reason
+
+
+def test_date_absente_pas_suspecte():
+    assert check_date_plausibility(None, date(2026, 6, 19)) == (False, None)
+
+
+def test_date_malformee_pas_suspecte():
+    # Une date illisible n'est pas « suspecte » ici (gérée ailleurs) → pas de flag.
+    assert check_date_plausibility("pas-une-date", date(2026, 6, 19)) == (False, None)
+
+
+def test_date_legerement_anterieure_ok():
+    # 10 jours avant l'ingestion : normal (délai scan), pas suspect.
+    suspect, _ = check_date_plausibility("2026-06-09", date(2026, 6, 19))
+    assert suspect is False
+
+
+# ─── Garde-fou date : effet sur build_tag_updates ────────────────────────────
+
+def test_date_suspecte_supprime_tag_annee():
+    # Même avec date_confidence haute, date_suspect → pas de tag année.
+    result = build_tag_updates(
+        [], {"doc_type": "facture", "date": "2025-06-05",
+             "date_confidence": 0.95, "confidence": HIGH},
+        date_suspect=True,
+    )
+    assert YEAR_TAG_IDS[2025] not in result
+
+
+def test_date_suspecte_force_a_verifier():
+    # Confiance globale haute mais date suspecte → a-verifier quand même.
+    result = build_tag_updates(
+        [], {"doc_type": "facture", "date": "2025-06-05",
+             "date_confidence": 0.95, "confidence": HIGH},
+        date_suspect=True,
+    )
+    assert TAG_IDS["a-verifier"] in result
 
 
 # ─── Sortie ───────────────────────────────────────────────────────────────────
