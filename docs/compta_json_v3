@@ -1,0 +1,63 @@
+# Chantier — `compta_json` v3 : UPC + Qté + prix unitaire par ligne
+
+## Rôle de ce repo (à garder en tête)
+
+`paperless-automation` est un **extracteur sans état**. Son seul boulot : « voilà ce
+que je lis sur le document ». Il ne gère PAS l'identité produit, la mémoire des items,
+ni les corrections — tout ça vit côté app compta (`vendor_items`, `findVendorItemMatch`,
+picker manuel qui apprend). Donc : **pas de DB de produits/UPC côté paperless.** On
+émet ce qu'on lit, proprement, et on s'arrête là.
+
+## Contrat actuel (v2) — rappel
+
+Chaque ligne de `compta_json.items[]` :
+
+```json
+{ "description": "string", "amount_cents": 1234, "taxable": true }
+```
+
+Racine : `total_cents`, `tps_cents`, `tvq_cents`, `currency`, `fournisseur`,
+`invoice_number`, `invoice_date`, `due_date`, `doc_type`, `supplier_foreign`,
+`source_method`, `ocr_text`.
+
+## v3 — 3 champs additifs par ligne
+
+```json
+{
+  "description": "string",
+  "amount_cents": 1234,          // entier, cents, AVANT taxes (inchangé)
+  "taxable": true,
+  "upc": "0651510...",           // NOUVEAU — string|null
+  "qty": 2,                      // NOUVEAU — ENTIER > 0, défaut 1
+  "unit_price_cents": 617        // NOUVEAU — entier > 0, cents, avant taxes
+}
+```
+
+### Règles (à respecter pour ne rien casser en aval)
+
+1. **Additif et non destructif.** Les 3 champs s'ajoutent ; ils ne doivent JAMAIS
+   dégrader l'extraction existante. Un document sans UPC/qté doit toujours produire un
+   `compta_json` valide (`upc:null`, `qty:1`, `unit_price_cents = amount_cents`).
+
+2. **Invariant** : `amount_cents == qty * unit_price_cents` (arrondi au cent). Si tu
+   n'as que le montant de ligne → `qty=1`, `unit_price_cents=amount_cents`.
+
+3. **Qté = ENTIER** (décidé côté compta, pas de décimale). Pas de qté claire → `qty=1`.
+
+4. **UPC : jamais deviner.** Valide le **check digit UPC-A** (12ᵉ chiffre, checksum
+   mod-10) avant d'émettre. Checksum KO ou lecture incomplète → `upc: null`. Mieux
+   vaut « UPC absent » qu'« UPC faux » : l'aval s'en remet alors au match
+   fournisseur+description, qui couvre déjà le cas dominant (ex. Maxi = bouteille d'eau).
+
+5. **Taxes & montants inchangés** : ne jamais recalculer `tps_cents`/`tvq_cents` par
+   taux, toujours les reprendre tels quels. `amount_cents` et `unit_price_cents` restent
+   AVANT taxes, en cents entiers.
+
+## Travail attendu
+
+- [ ] Extraire UPC / qté / prix unitaire par ligne (en plus du montant déjà extrait).
+- [ ] Implémenter la validation du **check digit UPC-A** → `null` si invalide.
+- [ ] Garantir l'invariant `amount_cents == qty × unit_price_cents` (avec repli).
+- [ ] Sérialiser les 3 champs dans `compta_json.items[]`.
+- [ ] Tester sur le **reçu Maxi** (UPC par ligne, peu visible) + une facture classique.
+- [ ] Vérifier la rétro-compatibilité (document sans UPC/qté → JSON toujours valide).
