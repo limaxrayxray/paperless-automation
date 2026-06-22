@@ -28,6 +28,7 @@ from config import DATE_REVIEW_MAX_PAST_DAYS
 from config import DOC_TYPE_IDS
 from config import ERROR_TAG_ID
 from config import GLOBAL_CONFIDENCE_THRESHOLD
+from config import PERSONAL_CONTEXT_TAG_IDS
 from config import PROTECTED_TAG_IDS
 from config import TAG_IDS
 from config import TRIGGER_TAG_IDS
@@ -171,11 +172,12 @@ def build_tag_updates(
 def build_custom_fields(
     existing_custom_fields: list[dict],
     analysis: dict,
+    skip_compta: bool = False,
 ) -> list[dict]:
     """
     Construit la mise à jour des custom fields.
-    Extrait toujours TPS/TVQ/Total/Facture quand disponibles — Alexandre décide
-    du contexte personnel/professionnel lui-même via les tags.
+    Si `skip_compta` (document personnel/médical), n'écrit NI les champs financiers
+    (TPS/TVQ/Total/Facture) NI le compta_json — le doc reste hors compta entreprise.
 
     Sérialise aussi le contrat d'unification `compta_json` (cf. SPEC.md) quand le
     champ est configuré dans `CUSTOM_FIELD_IDS`. Tant que l'id réel n'y est pas
@@ -183,6 +185,12 @@ def build_custom_fields(
     simplement pas écrit — aucune erreur.
     """
     updates = {}
+
+    # Document personnel/médical : aucun champ compta n'est écrit (hors compta entreprise).
+    if skip_compta:
+        return paperless_client.build_custom_fields_payload(
+            existing_custom_fields, updates, CUSTOM_FIELD_IDS,
+        )
 
     if analysis.get("doc_type") in ("facture", "recu", "releve", "contrat", "assurance", "autre"):
         if analysis.get("tps") is not None:
@@ -330,8 +338,18 @@ def process_document(doc_id: int) -> None:
         except Exception as e:
             log.warning(f"Erreur correspondant: {e}")
 
-    # Custom fields
-    new_custom_fields = build_custom_fields(current_custom_fields, analysis)
+    # Custom fields — un document personnel/médical reste HORS compta entreprise :
+    # on regarde les tags pré-existants ET ceux posés à ce passage (ex. medical
+    # détecté maintenant → personnel forcé). À terme, ce sera plutôt un tag
+    # d'inclusion « à comptabiliser » posé à l'analyse qui ouvrira la compta.
+    is_personal = bool(
+        (set(current_tags) | set(new_tags)) & PERSONAL_CONTEXT_TAG_IDS,
+    )
+    if is_personal:
+        log.info(f"Doc {doc_id}: contexte personnel/médical → pas de compta_json")
+    new_custom_fields = build_custom_fields(
+        current_custom_fields, analysis, skip_compta=is_personal,
+    )
     if new_custom_fields != current_custom_fields:
         payload["custom_fields"] = new_custom_fields
 

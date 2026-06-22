@@ -113,6 +113,31 @@ def test_select_liste_vide():
     assert bf.select_documents_to_backfill([], COMPTA_FIELD_ID) == []
 
 
+# ─── Exclusion du contexte personnel/médical ─────────────────────────────────
+
+def _doc_tags(doc_id, tags):
+    d = _doc(doc_id)
+    d["tags"] = tags
+    return d
+
+
+def test_select_exclut_docs_personnels():
+    from config import PERSONAL_CONTEXT_TAG_IDS
+    perso = next(iter(PERSONAL_CONTEXT_TAG_IDS))  # ex. medical/personnel/Leticia…
+    docs = [
+        _doc_tags(1, [3]),         # facture pro → backfill
+        _doc_tags(2, [9, perso]),  # reçu mais perso → exclu
+    ]
+    selected = bf.select_documents_to_backfill(docs, COMPTA_FIELD_ID)
+    ids = [d["id"] for d in selected]
+    assert ids == [1]
+
+
+def test_select_sans_tags_inclus():
+    # Doc sans tags (helper par défaut) → pas personnel → backfillé.
+    assert len(bf.select_documents_to_backfill([_doc(1)], COMPTA_FIELD_ID)) == 1
+
+
 # ─── build_backfill_patch ─────────────────────────────────────────────────────
 
 def _analysis(**over):

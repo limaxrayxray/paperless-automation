@@ -31,6 +31,7 @@ import paperless_client
 from compta_payload import COMPTA_CONTRACT_VERSION
 from compta_payload import build_compta_payload
 from config import CUSTOM_FIELD_IDS
+from config import PERSONAL_CONTEXT_TAG_IDS
 from config import TAG_IDS
 
 # Documents éligibles au backfill : ceux porteurs d'un de ces tags de classification.
@@ -66,14 +67,23 @@ def needs_backfill(
     return version is None or version < target_version
 
 
+def _is_personal_context(doc: dict) -> bool:
+    """True si le document porte un tag de contexte personnel (hors compta entreprise)."""
+    return bool(set(doc.get("tags") or []) & PERSONAL_CONTEXT_TAG_IDS)
+
+
 def select_documents_to_backfill(
     docs: list[dict],
     compta_field_id: int,
     limit: int | None = None,
 ) -> list[dict]:
-    """Filtre les documents qui doivent être backfillés et applique éventuellement
-    une limite. Fonction pure — aucun réseau."""
-    selected = [d for d in docs if needs_backfill(d, compta_field_id)]
+    """Filtre les documents à backfiller : besoin de (re)calcul ET hors contexte
+    personnel (un reçu médical/perso ne doit pas recevoir de compta_json). Applique
+    éventuellement une limite. Fonction pure — aucun réseau."""
+    selected = [
+        d for d in docs
+        if needs_backfill(d, compta_field_id) and not _is_personal_context(d)
+    ]
     if limit is not None:
         selected = selected[:limit]
     return selected

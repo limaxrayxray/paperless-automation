@@ -38,6 +38,27 @@ def compta_field(monkeypatch):
     return COMPTA_ID
 
 
+# ─── skip_compta : document personnel/médical ────────────────────────────────
+
+def test_skip_compta_n_ecrit_aucun_champ_compta(compta_field):
+    # Doc personnel : ni champs financiers ni compta_json, même si tout est présent.
+    analysis = {
+        "doc_type": "recu", "total": "100.00", "tps": "5.00", "tvq": "9.98",
+        "invoice_number": "X1", "correspondent": "Clinique", "date": "2026-06-01",
+        "line_items": [{"description": "Consultation", "amount": 100.00}],
+        "_method": "vision_primary",
+    }
+    fields = build_custom_fields([], analysis, skip_compta=True)
+    assert fields == []  # rien écrit du tout
+
+
+def test_skip_compta_false_ecrit_normalement(compta_field):
+    analysis = {"doc_type": "facture", "total": "10.00", "_method": "ocr_text"}
+    fields = _by_id(build_custom_fields([], analysis, skip_compta=False))
+    assert TOTAL_ID in fields
+    assert compta_field in fields
+
+
 # ─── Tolérance : champ non configuré ─────────────────────────────────────────
 
 def test_sans_champ_compta_rien_ecrit(monkeypatch):

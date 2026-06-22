@@ -113,6 +113,20 @@ ALLOWED_TAGS = {
     "Leticia",   # auto: si document concerne Leticia
 }
 
+# ─── CONTEXTE PERSONNEL (hors compta entreprise) ──────────────────────────────
+# Un document portant un de ces tags est personnel : Paperless le classe (tags,
+# titre, date) mais N'écrit PAS de compta_json ni de champs financiers
+# (TPS/TVQ/Total/Facture). Mesure d'EXCLUSION provisoire : à terme, c'est un tag
+# d'INCLUSION « à comptabiliser » posé automatiquement à l'analyse qui décidera
+# quels docs vont en compta (phase finale — pas activé aujourd'hui).
+PERSONAL_CONTEXT_TAG_IDS = {
+    13,  # medical
+    56,  # personnel
+    65,  # Leticia
+    69,  # Olivia
+    5,   # impots
+}
+
 # ─── TAGS ANNÉE ───────────────────────────────────────────────────────────────
 YEAR_TAG_IDS = {
     2010: 71,
