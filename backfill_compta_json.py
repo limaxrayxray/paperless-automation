@@ -145,21 +145,28 @@ def main(argv: list[str] | None = None) -> int:
     for doc in to_backfill:
         doc_id = doc.get("id")
         title = doc.get("title", "") or ""
+        # Dry-run : on ne dépense AUCUN appel Claude, on liste seulement les
+        # candidats (le calcul réel exige une ré-analyse, faite en mode --no-dry-run).
+        if args.dry_run:
+            print(f"#{doc_id} [dry-run] à (re)calculer — « {title} »")
+            continue
         content = doc.get("content", "") or ""
         try:
             analysis = claude_analyzer.analyze_document_smart(doc_id, title, content)
+        except claude_analyzer.RateLimitError as e:
+            # Inutile d'insister : on s'arrête. La reprise est idempotente (les docs
+            # non écrits restent < version courante et seront repris au relancement).
+            print(f"#{doc_id} RATE LIMIT — arrêt. Relancer plus tard pour reprendre: {e}")
+            break
         except Exception as e:
             print(f"#{doc_id} ERREUR analyse: {e}")
             continue
         patch = build_backfill_patch(
             doc.get("custom_fields") or [], analysis, compta_field_id,
         )
-        if args.dry_run:
-            print(f"#{doc_id} [dry-run] compta_json calculé — « {title} »")
-        else:
-            paperless_client.patch_document(doc_id, patch)
-            written += 1
-            print(f"#{doc_id} compta_json écrit — « {title} »")
+        paperless_client.patch_document(doc_id, patch)
+        written += 1
+        print(f"#{doc_id} compta_json écrit — « {title} »")
 
     if args.dry_run:
         print(f"\n=== DRY-RUN terminé : {len(to_backfill)} candidats, rien écrit ===")
